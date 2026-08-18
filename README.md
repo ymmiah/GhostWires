@@ -1,137 +1,273 @@
-# ⚡ Ghostwire Mk.III — Advanced AI Web Reconnaissance Platform
+<div align="center">
 
-**Ghostwire Mk.III** is a high-performance, generative AI-powered web reconnaissance and digital intelligence gathering platform. Built with React, TypeScript, Tailwind CSS, and Google's Gemini 2.5 Flash model, Ghostwire transforms raw web data and fully rendered client-side DOMs into structured, actionable intelligence reports.
+# ⚡ GHOSTWIRE Mk.III
+### Autonomous Web Intelligence & High-Fidelity OSINT Reconnaissance Framework
 
----
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-18.2-61DAFB.svg?style=flat-square&logo=react)](https://reactjs.org/)
+[![Vite](https://img.shields.io/badge/Vite-6.2-646CFF.svg?style=flat-square&logo=vite)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-3.4-38B2AC.svg?style=flat-square&logo=tailwind-css)](https://tailwindcss.com/)
+[![Gemini 2.5 Flash](https://img.shields.io/badge/AI_Engine-Gemini_2.5_Flash-8E75B2.svg?style=flat-square&logo=google)](https://ai.google.dev/)
+[![Architecture](https://img.shields.io/badge/Architecture-Full--Stack_Express_%2B_Vite-green.svg?style=flat-square)](https://expressjs.com/)
 
-## 🌟 Key Capabilities & Modules
-
-### 1. 🛡️ Multi-Engine Proxy Pipeline
-- **Dynamic Render Fetching**: Resilient multi-tier proxy architecture featuring RenderTron (JS-enabled headless DOM rendering), AllOrigins, and CodeTabs to bypass CORS limitations and capture client-side single-page applications (React, Vue, Angular).
-- **Real-Time Terminal Protocol Logs**: Live streaming status logs tracking connection phases, handshake protocols, DOM extraction, and AI processing.
-
-### 2. 🔍 Advanced Reconnaissance & Infrastructure Fingerprinting
-- **Server & Hosting Intel**: Host platform, server IP address, geographical geolocation, and platform classification.
-- **WAF & Security Layer**: Web Application Firewall detection and threat intelligence notes.
-- **CMS & Frameworks**: Identification of CMS themes, active plugins, and granular software libraries with version detection.
-- **CVE & Vulnerability Matrix**: Heuristic vulnerability mapping classified by severity (*Critical*, *High*, *Medium*, *Low*, *Informational*).
-
-### 3. 👥 OSINT & Contact Harvesting
-- **Digital Footprint Extraction**: Identification of public emails, telephone numbers, and physical mailing addresses.
-- **Key Personnel**: Discovered leadership profiles, titles, and team members.
-- **Social Profiles**: Aggregation of linked Twitter/X, LinkedIn, GitHub, and Facebook channels.
-
-### 4. 🧠 Content & Linguistic Intelligence
-- **Interactive Sentiment Gauge**: Visual radial meter scoring page tone from `-1.0` (negative) to `+1.0` (positive).
-- **Readability & Language**: Automated assessment of linguistic grade-level complexity and detected dialect/language.
-- **Key Entity & Topic Extraction**: Extraction of central entities and thematic tags.
-
-### 5. ♿ Accessibility (A11y) Audit
-- **Comprehensive A11y Scoring**: Overall accessibility compliance score (0–100).
-- **Categorized Issue Tracking**: Severity classification (*Critical*, *Serious*, *Moderate*, *Minor*) with target element selectors and remediation notes.
-
-### 6. 📈 SEO & Performance Analysis
-- **Metadata Inspection**: Title tags, H1 heading hierarchies, meta descriptions, and keyword tags.
-- **Social Graph Previews**: OpenGraph (OG) and Twitter Card card metadata extraction.
-- **Performance Hints**: Concrete optimization tips based on DOM structure and content length.
-
-### 7. 🔗 Link Categorization & Distribution
-- **Visual Distribution Bar**: Split breakdown of internal, external, and social outbound links.
-- **Collapsible Manifests**: Quick inspection and navigation across all extracted target endpoints.
-
-### 8. 👁️ AI Vision Subroutine (Image Analysis)
-- **Deep Image Inspection**: One-click secondary AI pass generating contextual, natural-language descriptions for all discovered media assets.
-
-### 9. 🕷️ Deep Site Crawler
-- **Recursive Internal Crawl**: Compiles internal link manifests and automatically crawls linked pages, summarizing each page's primary intelligence.
-
-### 10. 💬 Intelligence Debriefing (AI Chat)
-- **Grounded Interactive Analyst**: Chat interface grounded strictly in the collected reconnaissance data.
-- **Suggested Tactical Queries**: Dynamic query chips for summarizing security risks, sentiment, and core findings.
-
-### 11. 💾 Export & Data Portability
-- **JSON Intelligence Dossier**: Full export of structured intelligence data for external tooling or offline archiving.
-- **Integrated Clipboard Actions**: Rapid copying for IP addresses, domain metadata, emails, and phone numbers.
+<p align="center">
+  <b>An enterprise-grade, full-stack intelligence gathering platform engineered for automated digital reconnaissance, threat modeling, technological stack fingerprinting, and linguistic telemetry.</b>
+</p>
 
 ---
 
-## 🛠️ Tech Stack
+</div>
 
-- **Frontend**: React 18, TypeScript, Tailwind CSS
-- **AI Engine**: Google GenAI TypeScript SDK (`@google/genai`) powered by `gemini-2.5-flash`
-- **Build System**: Vite 6, Node.js / ES2022
-- **Aesthetic**: Cyberpunk high-contrast terminal UI with custom scanline overlays, neon status indicators, and monospace typography.
+## 📑 Table of Contents
 
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js (v18+)
-- A Google Gemini API Key
-
-### Installation
-
-1. **Clone repository and install dependencies**:
-   ```bash
-   npm install
-   ```
-
-2. **Configure Environment Variables**:
-   Create a `.env` or `.env.local` file in the project root:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
-
-3. **Start Development Server**:
-   ```bash
-   npm run dev
-   ```
-   The application will be available at `http://localhost:3000`.
-
-4. **Production Build**:
-   ```bash
-   npm run build
-   npm run start
-   ```
+- [1. Executive System Overview](#1-executive-system-overview)
+- [2. System Architecture & Network Topology](#2-system-architecture--network-topology)
+- [3. Core Intelligence Modules](#3-core-intelligence-modules)
+  - [3.1 Resilient Direct Server Proxy & Failover Matrix](#31-resilient-direct-server-proxy--failover-matrix)
+  - [3.2 Infrastructure & Security Fingerprinting](#32-infrastructure--security-fingerprinting)
+  - [3.3 Open-Source Intelligence (OSINT) & Contact Harvester](#33-open-source-intelligence-osint--contact-harvester)
+  - [3.4 NLP Linguistic Analysis & Sentiment Telemetry](#34-nlp-linguistic-analysis--sentiment-telemetry)
+  - [3.5 Accessibility (WCAG / A11y) & SEO Audit Engine](#35-accessibility-wcag--a11y--seo-audit-engine)
+  - [3.6 Vision Subroutine (Contextual Multimodal Media Analysis)](#36-vision-subroutine-contextual-multimodal-media-analysis)
+  - [3.7 Deep Site Crawler & Recursive Link Graph](#37-deep-site-crawler--recursive-link-graph)
+  - [3.8 Intelligence Debriefing (Grounded Tactical AI Analyst)](#38-intelligence-debriefing-grounded-tactical-ai-analyst)
+- [4. API Specification & Endpoints](#4-api-specification--endpoints)
+- [5. Technology Stack & Dependencies](#5-technology-stack--dependencies)
+- [6. Deployment, Build & Production Runtime](#6-deployment-build--production-runtime)
+- [7. Directory Structure](#7-directory-structure)
+- [8. Security & Ethical Operations Notice](#8-security--ethical-operations-notice)
 
 ---
 
-## 📁 Project Directory Structure
+## 1. Executive System Overview
+
+**Ghostwire Mk.III** addresses the core challenge of modern web reconnaissance: client-heavy Single Page Applications (SPAs), aggressive CORS boundaries, dynamic DOM hydration, and multi-vector data extraction.
+
+By coupling a **dedicated Node.js server-side direct proxy** with **Google's Gemini 2.5 Flash LLM**, Ghostwire bypasses browser security constraints, executes deep DOM traversal, extracts structured threat intelligence, and produces verifiable dossiers in milliseconds.
 
 ```
++-----------------------------------------------------------------------------------+
+|                              GHOSTWIRE MK.III PIPELINE                            |
++-----------------------------------------------------------------------------------+
+| [ Target URL ]                                                                    |
+|        │                                                                          |
+|        ▼                                                                          |
+| [ Ingress Protocol Normalizer ] (Protocol auto-resolution, URI sanitization)      |
+|        │                                                                          |
+|        ▼                                                                          |
+| [ Multi-Tier Fetch Engine ] ──► Tier 1: Express Direct Server Proxy (/api/proxy)  |
+|                                ──► Tier 2: AllOrigins JSON Gateway                |
+|                                ──► Tier 3: CorsProxy.io Fallback Stream           |
+|                                ──► Tier 4: CodeTabs Failover                      |
+|        │                                                                          |
+|        ▼                                                                          |
+| [ Fully Hydrated DOM Stream ] (Raw HTML + Structured Assets)                      |
+|        │                                                                          |
+|        ▼                                                                          |
+| [ Gemini 2.5 Flash Engine ] ──► Advanced Infrastructure Recon (WAF, CVE, Stack)   |
+|                              ──► OSINT Harvester (Emails, Phones, Executives)     |
+|                              ──► Linguistic Telemetry (Sentiment, Readability)    |
+|                              ──► A11y & SEO Graph Auditing                        |
+|        │                                                                          |
+|        ▼                                                                          |
+| [ Tactical Command UI & Debriefing Interface ] (Real-Time Terminal, Visualizer)   |
++-----------------------------------------------------------------------------------+
+```
+
+---
+
+## 2. System Architecture & Network Topology
+
+Ghostwire Mk.III operates as a unified **Full-Stack Application** combining an Express server host with a reactive Vite/React frontend.
+
+### Network Topology & Proxy Isolation
+```
+                     +---------------------------------------+
+                     |            Client Browser             |
+                     |  (React 18 + Tailwind Tactical UI)    |
+                     +-------------------+-------------------+
+                                         |
+                       Fetch Request to Internal Endpoints
+                                         |
+                                         ▼
+                     +---------------------------------------+
+                     |         Node.js Express Server        |
+                     |             (Port: 3000)              |
+                     +-------------------+-------------------+
+                                         |
+                      Direct Server Fetch (No Browser CORS)
+                      + Custom User-Agent & Abort Signals
+                                         |
+                                         ▼
+                     +---------------------------------------+
+                     |          Target Remote Host           |
+                     |      (https://target-domain.com)      |
+                     +---------------------------------------+
+```
+
+1. **Zero Browser CORS Failures**: Browser requests are dispatched to the local `/api/proxy` endpoint. The Node server makes direct outbound HTTP/HTTPS calls using Node.js native `fetch` with realistic browser headers (`User-Agent`, `Accept-Language`, `Sec-Fetch-*`), eliminating browser CORS errors and Cloud Run iframe sandbox blocks.
+2. **Deterministic Resilience**: If a target blocks direct datacenter IP ingress, the system gracefully falls back across three secondary proxy gateways (`AllOrigins`, `CorsProxy`, `CodeTabs`).
+
+---
+
+## 3. Core Intelligence Modules
+
+### 3.1 Resilient Direct Server Proxy & Failover Matrix
+- **Server Route**: `GET /api/proxy?url=<TARGET_URL>`
+- **Features**:
+  - Outbound timeout protection via `AbortController` (20-second timeout ceiling).
+  - Multi-mime type streaming (HTML text mode vs. binary image streaming mode).
+  - Custom user-agent rotation mimicking Chrome/Safari desktop environments.
+  - Automatic redirect resolution and header propagation.
+
+### 3.2 Infrastructure & Security Fingerprinting
+- **Hosting & Network**: Server IP resolution, geographic location (City, Country), hosting platform provider.
+- **WAF & Security Perimeters**: Web Application Firewall detection (Cloudflare, AWS WAF, Akamai) and threat notes.
+- **CMS & Theme Forensics**: CMS theme identification (WordPress, Shopify, Drupal) and active plugins.
+- **Heuristic CVE Vulnerability Engine**: Automated mapping of discovered software components to known Common Vulnerabilities and Exposures (CVEs) with severity levels:
+  $$\text{Severity} \in \{\text{Critical}, \text{High}, \text{Medium}, \text{Low}, \text{Informational}\}$$
+
+### 3.3 Open-Source Intelligence (OSINT) & Contact Harvester
+- **Communication Vectors**: Regex and semantic extraction of emails, customer service hotlines, direct phone numbers, and physical mailing addresses.
+- **Leadership & Personnel Identification**: Maps named individuals, executive officers, and their organizational titles.
+- **Social Graph Mapping**: Consolidated registry of GitHub, LinkedIn, Twitter/X, and Facebook footprints.
+
+### 3.4 NLP Linguistic Analysis & Sentiment Telemetry
+- **Dynamic Sentiment Gauge**: Normalized circular radial indicator rendering sentiment polarity:
+  $$\text{Sentiment Score} \in [-1.00 \text{ (Negative)}, +1.00 \text{ (Positive)}]$$
+- **Readability Index**: Automated grade-level reading complexity calculation (e.g., *College Level*, *8th Grade*).
+- **Language Detection & Topic Clusters**: Primary dialect detection alongside semantic topic badges.
+
+### 3.5 Accessibility (WCAG / A11y) & SEO Audit Engine
+- **A11y Compliance Score**: Normalized 0–100 compliance ranking based on DOM semantic structure, contrast, and missing ARIA properties.
+- **Targeted Element Remediation**: CSS selector mapping for each reported accessibility issue.
+- **SEO & Social Graph**: Title tag analysis, H1 hierarchy audit, word count metrics, and OpenGraph/Twitter Card asset inspection.
+
+### 3.6 Vision Subroutine (Contextual Multimodal Media Analysis)
+- **Secondary Image Extraction Pass**: Analyzes discovered media assets (`<img>` tags) in context with their surrounding DOM markup.
+- **AI-Powered Visual Synthesis**: Generates detailed, natural-language summaries for every visual asset.
+
+### 3.7 Deep Site Crawler & Recursive Link Graph
+- **Internal Link Manifest**: Automatically compiles unique internal links on the scanned domain.
+- **Batch Intelligence Crawl**: Traverses internal sub-pages in sequence, summarizing child page content into the master dossier.
+
+### 3.8 Intelligence Debriefing (Grounded Tactical AI Analyst)
+- **Grounded Chat Engine**: An interactive debriefing terminal (`ChatInterface`) powered by Gemini.
+- **Anti-Hallucination Guardrails**: Strictly bounded to the JSON reconnaissance report of the target URL.
+- **Suggested Tactical Queries**: Pre-computed query prompts for instant investigative pivots.
+
+---
+
+## 4. API Specification & Endpoints
+
+| Method | Endpoint | Description | Query Parameters / Payload |
+|---|---|---|---|
+| `GET` | `/api/health` | Service health status, version & runtime state | None |
+| `GET` | `/api/proxy` | Server-side direct proxy for HTML content | `url` (required, string) |
+| `GET` | `/api/proxy` | Binary image proxy mode | `url` (required, string), `type=image` |
+
+### Sample Proxy Response Header Metrics:
+```http
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Access-Control-Allow-Origin: *
+X-Ghostwire-Status: 200
+X-Ghostwire-Final-URL: https://target.example.com
+```
+
+---
+
+## 5. Technology Stack & Dependencies
+
+```json
+{
+  "runtime": "Node.js (v18+ / v22+)",
+  "language": "TypeScript 5.8.2",
+  "frontend": {
+    "framework": "React 18.2.0",
+    "styling": "Tailwind CSS 3.4",
+    "icons": "Lucide / Inline Optimized SVGs",
+    "tooling": "Vite 6.2.0"
+  },
+  "backend": {
+    "server": "Express 4.21.2",
+    "typescript_runner": "tsx",
+    "bundler": "esbuild 0.25.0"
+  },
+  "ai_foundation": {
+    "sdk": "@google/genai (^1.8.0)",
+    "primary_model": "gemini-2.5-flash"
+  }
+}
+```
+
+---
+
+## 6. Deployment, Build & Production Runtime
+
+### Development Mode
+Runs the hybrid Express server with integrated Vite middleware:
+```bash
+# Install dependencies
+npm install
+
+# Launch Full-Stack Dev Server on Port 3000
+npm run dev
+```
+
+### Production Build & Launch
+Complies with single-artifact containerization standards:
+```bash
+# 1. Compiles Vite static assets to dist/
+# 2. Bundles server.ts into self-contained CommonJS artifact (dist/server.cjs)
+npm run build
+
+# 3. Boots production server
+npm run start
+```
+
+---
+
+## 7. Directory Structure
+
+```
+.
 ├── components/
-│   ├── AccessibilityCard.tsx     # A11y scoring and issue severity cards
-│   ├── Card.tsx                  # Reusable terminal-themed container
-│   ├── ChatInterface.tsx         # Intelligence Debriefing AI chat assistant
-│   ├── ContentLanguageCard.tsx   # Sentiment gauge and linguistic metrics
-│   ├── CopyToClipboard.tsx       # Quick clipboard copy utility
-│   ├── Disclaimer.tsx            # Ethical usage guidelines & disclaimer
-│   ├── LoadingSpinner.tsx        # Terminal loading animation
-│   ├── ResultsDisplay.tsx        # Comprehensive reconnaissance dashboard
-│   ├── TerminalLog.tsx           # Real-time protocol event stream
-│   └── UrlInput.tsx              # URL input controller and scanner trigger
-├── App.tsx                       # Main application state and orchestration
-├── geminiService.ts              # Gemini 2.5 Flash prompts and SDK client
-├── index.html                    # Cyberpunk styles, importmaps & scanlines
-├── index.tsx                     # React application entry point
-├── metadata.json                 # Project configuration and capabilities
-├── types.ts                      # TypeScript data models and interfaces
-├── utils.ts                      # URL normalization and helper utilities
-└── vite.config.ts                # Vite build and proxy config
+│   ├── AccessibilityCard.tsx     # WCAG A11y scoring & issue impact cards
+│   ├── Card.tsx                  # Reusable tactical terminal UI card container
+│   ├── ChatInterface.tsx         # Intelligence Debriefing AI chat interface
+│   ├── ContentLanguageCard.tsx   # SVG Sentiment Gauge & linguistic metrics
+│   ├── CopyToClipboard.tsx       # Rapid one-click clipboard extraction utility
+│   ├── Disclaimer.tsx            # Legal, compliance & ethical usage notice
+│   ├── LoadingSpinner.tsx        # High-visibility radar loading component
+│   ├── ResultsDisplay.tsx        # Master reconnaissance dossier dashboard
+│   ├── TerminalLog.tsx           # Real-time protocol execution stream
+│   └── UrlInput.tsx              # URL input controller & scan dispatch
+├── App.tsx                       # Central orchestration, proxy failover & state
+├── geminiService.ts              # Gemini 2.5 Flash prompt schemas & AI subroutines
+├── index.html                    # Cyberpunk aesthetic, scanline overlays & imports
+├── index.tsx                     # React client-side hydration entry
+├── metadata.json                 # Project capabilities & environment manifest
+├── package.json                  # Dependencies, build scripts & metadata
+├── server.ts                     # Express server & high-performance proxy gateway
+├── tsconfig.json                 # TypeScript compiler configuration
+├── types.ts                      # Strict TypeScript interfaces & schemas
+├── utils.ts                      # URL normalization & link resolution utilities
+└── vite.config.ts                # Vite build and plugin configurations
 ```
 
 ---
 
-## 📝 Recent Updates & Changelog
+## 8. Security & Ethical Operations Notice
 
-### Version 3.1.0 — System Hardening & Maintenance
-- **Fixed JSX Parsing in Chat Module**: Resolved JSX token formatting for tactical prompt prefixes (`&gt;`), restoring compilation stability for the Debriefing interface.
-- **Model Upgrades**: Switched to `gemini-2.5-flash` for faster inference speeds, improved JSON schema adherence, and enhanced DOM parsing.
-- **Resilient Fallbacks**: Multi-proxy failover routing with automatic protocol normalization (`http://` / `https://`).
-- **Comprehensive Documentation**: Added complete README covering all active subroutines, modules, and API integrations.
+> [!CAUTION]
+> **Ghostwire Mk.III** is engineered for defensive security assessments, competitive intelligence gathering, accessibility compliance verification, and authorized OSINT investigations on public-facing assets.
+
+- **Non-Destructive Execution**: Ghostwire Mk.III operates purely in a read-only passive reconnaissance capacity. It does not perform active vulnerability exploitation, denial-of-service, or authentication bypass.
+- **Authorization**: Ensure you have explicit authorization or legitimate interest before scanning proprietary web properties.
 
 ---
 
-## ⚖️ Legal & Ethical Usage Notice
-Ghostwire Mk.III is built for authorized security assessments, OSINT research, and competitive intelligence gathering on public-facing web assets. Always ensure you have appropriate authorization before analyzing target systems.
+<div align="center">
+  <sub>Ghostwire Mk.III © 2026 // Autonomous Web Intelligence Protocol</sub>
+</div>

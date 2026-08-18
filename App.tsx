@@ -10,10 +10,59 @@ import type { ExtractionResult, ChatMessage, PageContent } from './types';
 import type { Chat } from '@google/genai';
 import { createAbsoluteUrl } from './utils';
 
-const PROXIES: { name: string; builder: (url: string) => string }[] = [
-    { name: 'RenderTron (JS Enabled)', builder: (url: string) => `https://render-tron.appspot.com/render/${url}` },
-    { name: 'AllOrigins', builder: (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
-    { name: 'CodeTabs', builder: (url: string) => `https://api.codetabs.com/v1/proxy?quest=${url}` }
+const PROXIES: {
+    name: string;
+    builder: (url: string) => string;
+    fetcher?: (url: string) => Promise<string>;
+}[] = [
+    {
+        name: 'Ghostwire Direct Uplink (Server-Side Proxy)',
+        builder: (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`,
+        fetcher: async (url: string) => {
+            const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || `Direct proxy responded with status ${res.status}`);
+            }
+            return await res.text();
+        }
+    },
+    {
+        name: 'AllOrigins Gateway',
+        builder: (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        fetcher: async (url: string) => {
+            try {
+                const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.contents) return data.contents;
+                }
+            } catch {
+                // Ignore and try raw
+            }
+            const rawRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+            if (!rawRes.ok) throw new Error(`AllOrigins raw status ${rawRes.status}`);
+            return await rawRes.text();
+        }
+    },
+    {
+        name: 'CorsProxy Gateway',
+        builder: (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+        fetcher: async (url: string) => {
+            const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`);
+            if (!res.ok) throw new Error(`CorsProxy status ${res.status}`);
+            return await res.text();
+        }
+    },
+    {
+        name: 'CodeTabs Gateway',
+        builder: (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        fetcher: async (url: string) => {
+            const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
+            if (!res.ok) throw new Error(`CodeTabs status ${res.status}`);
+            return await res.text();
+        }
+    }
 ];
 
 const App: React.FC = () => {
@@ -76,24 +125,33 @@ const App: React.FC = () => {
         for (const proxy of PROXIES) {
             setLogMessages(prev => [...prev, `> Attempting connection via ${proxy.name}...`]);
             try {
-                const proxyUrl = proxy.builder(validUrl);
-                const response = await fetch(proxyUrl);
-                if (!response.ok) {
-                    throw new Error(`Proxy service responded with status: ${response.status}.`);
+                let content = '';
+                if (proxy.fetcher) {
+                    content = await proxy.fetcher(validUrl);
+                } else {
+                    const proxyUrl = proxy.builder(validUrl);
+                    const response = await fetch(proxyUrl);
+                    if (!response.ok) {
+                        throw new Error(`Proxy service responded with status: ${response.status}.`);
+                    }
+                    content = await response.text();
                 }
-                htmlContent = await response.text();
-                if (!htmlContent) {
+
+                if (!content || content.trim().length === 0) {
                     throw new Error('Data stream empty. Proxy returned no content.');
                 }
+
+                htmlContent = content;
                 usedProxyBuilder = proxy.builder;
                 successfulProxyName = proxy.name;
                 setSuccessfulProxyBuilder(() => proxy.builder);
                 successfulFetch = true;
-                setLogMessages(prev => [...prev, `> Secure link established via ${proxy.name}.`]);
+                setLogMessages(prev => [...prev, `> Secure link established via ${proxy.name}. Loaded ${htmlContent.length} bytes.`]);
                 break;
             } catch (err) {
                 lastError = err as Error;
-                setLogMessages(prev => [...prev, `> Connection via ${proxy.name} failed. Retrying...`]);
+                const errDetail = err instanceof Error ? err.message : 'Unknown connection error';
+                setLogMessages(prev => [...prev, `> Connection via ${proxy.name} failed (${errDetail}). Retrying fallback...`]);
             }
         }
         
@@ -163,12 +221,19 @@ const App: React.FC = () => {
             
             setLogMessages(prev => [...prev, `> Crawling: ${pageUrl}`]);
             try {
-                const proxyUrl = successfulProxyBuilder(pageUrl);
-                const response = await fetch(proxyUrl);
-                if (!response.ok) {
-                    throw new Error(`Proxy fetch failed with status ${response.status}`);
+                let html = '';
+                const directRes = await fetch(`/api/proxy?url=${encodeURIComponent(pageUrl)}`);
+                if (directRes.ok) {
+                    html = await directRes.text();
+                } else {
+                    const proxyUrl = successfulProxyBuilder(pageUrl);
+                    const response = await fetch(proxyUrl);
+                    if (!response.ok) {
+                        throw new Error(`Proxy fetch failed with status ${response.status}`);
+                    }
+                    html = await response.text();
                 }
-                const html = await response.text();
+
                 if (!html) {
                     throw new Error('No content received from page.');
                 }
