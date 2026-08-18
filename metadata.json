@@ -1,0 +1,7 @@
+{
+  "name": "Ghostwire Mk.III",
+  "description": "Ghostwire Mk.III is a generative AI-powered tool for advanced website reconnaissance. Analyze a target URL to extract technical, content, and linguistic intelligence, providing deep insights into a brand or person's online presence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"],
+  "prompt": ""
+}

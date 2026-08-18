@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ghostwire Mk.III</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'hacker-green': '#00ff41',
+              'hacker-green-dark': '#008f11',
+              'cyber-blue': '#00bfff',
+              'hacker-dark': '#0d0d0d',
+              'hacker-dark-2': '#1a1a1a',
+              'hacker-red': '#ff0033',
+              'text-primary': '#e5e7eb',
+              'text-secondary': '#9ca3af',
+            },
+            fontFamily: {
+              mono: ['ui-monospace', 'Menlo', 'Monaco', 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono', 'Oxygen Mono', 'Ubuntu Monospace', 'Source Code Pro', 'Fira Mono', 'Droid Sans Mono', 'Courier New', 'monospace'],
+            },
+            boxShadow: {
+              'glow-green': '0 0 5px #00ff41, 0 0 10px #00ff41, 0 0 15px #00ff41',
+              'glow-blue': '0 0 5px #00bfff, 0 0 10px #00bfff',
+              'glow-red': '0 0 5px #ff0033, 0 0 10px #ff0033',
+            },
+            keyframes: {
+              blink: {
+                '0%, 100%': { opacity: 1 },
+                '50%': { opacity: 0 },
+              },
+              fadeIn: {
+                'from': { opacity: 0, transform: 'translateY(10px)' },
+                'to': { opacity: 1, transform: 'translateY(0)' },
+              },
+              bounce: {
+                '0%, 100%': { transform: 'translateY(-25%)', animationTimingFunction: 'cubic-bezier(0.8, 0, 1, 1)' },
+                '50%': { transform: 'translateY(0)', animationTimingFunction: 'cubic-bezier(0, 0, 0.2, 1)' }
+              }
+            },
+            animation: {
+              blink: 'blink 1s step-end infinite',
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'bounce': 'bounce 1s infinite',
+            }
+          },
+        },
+      }
+    </script>
+  <style>
+    body {
+      background-color: #0d0d0d;
+      background-image: 
+        radial-gradient(circle at top, rgba(26, 26, 26, 0.7) 0%, #0d0d0d 35%),
+        repeating-linear-gradient(rgba(0,191,255, 0.05) 0 1px, transparent 1px 100%),
+        repeating-linear-gradient(90deg, rgba(0,191,255, 0.05) 0 1px, transparent 1px 100%);
+      background-size: 100% 100%, 30px 30px, 30px 30px;
+      position: relative;
+    }
+    /* Scanline overlay */
+    body::after {
+      content: ' ';
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      z-index: 9999;
+      background-size: 100% 2px, 3px 100%;
+      pointer-events: none;
+    }
+    .text-shadow-glow-green {
+      text-shadow: 0 0 5px rgba(0, 255, 65, 0.7), 0 0 10px rgba(0, 255, 65, 0.4);
+    }
+     .text-shadow-glow-blue {
+      text-shadow: 0 0 5px rgba(0, 191, 255, 0.7), 0 0 10px rgba(0, 191, 255, 0.4);
+    }
+    .blinking-cursor {
+      display: inline-block;
+      width: 10px;
+      height: 1.5rem;
+      background-color: #00ff41;
+      animation: blink 1s step-end infinite;
+      margin-left: 8px;
+    }
+  </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "@google/genai": "https://esm.sh/@google/genai@^1.8.0",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
+    "react/": "https://esm.sh/react@18.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
