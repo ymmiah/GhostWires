@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Smoke test (server boots with no API keys, BYOK-only)
+        env:
+          PORT: 3000
+          GHOSTWIRES_BYOK_ONLY: '1'
+        run: |
+          node dist-server/server.cjs &
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:3000/api/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:3000/api/health | grep -q '"byokOnly":true'
+          curl -fsS http://127.0.0.1:3000/ | grep -q 'GhostWires'
+          # SSRF guard must block internal targets
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3000/api/recon -H 'content-type: application/json' -d '{"url":"http://169.254.169.254/"}')
+          test "$code" = "403"

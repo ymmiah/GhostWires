@@ -23,12 +23,15 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.6.1",
     "esbuild": "^0.28.2",
+    "postcss": "^8.5.31",
+    "tailwindcss": "^3.4.19",
     "tsx": "^4.23.12",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   },
-  "description": "GhostWires Mk.IV \u2014 passive OSINT reconnaissance (DNS, TLS, headers, tech fingerprint, contacts, CT logs, Wayback) with AI-grounded analysis via NVIDIA NIM, Gemini, OpenRouter or Groq.",
+  "description": "GhostWires Mk.IV — passive OSINT reconnaissance (DNS, TLS, headers, tech fingerprint, contacts, CT logs, Wayback) with AI-grounded analysis via NVIDIA NIM, Gemini, OpenRouter or Groq.",
   "author": "Yasin Mohammed Miah, Student of BCU, BSc Computing Top-Up (Hons)",
   "engines": {
     "node": ">=20.12"

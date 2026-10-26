@@ -202,6 +202,6 @@ export interface ProviderInfo {
     vision: boolean;
 }
 
-export interface ProvidersResponse { default: AIProviderId | null; providers: ProviderInfo[]; }
+export interface ProvidersResponse { default: AIProviderId | null; byokOnly: boolean; providers: ProviderInfo[]; }
 
 export interface ChatMessage { role: 'user' | 'model'; content: string; }

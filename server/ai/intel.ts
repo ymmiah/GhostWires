@@ -1,7 +1,7 @@
 // GhostWires Mk.IV — AI layer. The model only interprets REAL facts gathered by the
 // deterministic pipeline; it is explicitly told not to invent infrastructure.
 import type { ReconReport, AIAnalysis, ChatMessage } from '../../types';
-import { getProvider, type ChatTurn } from './providers';
+import { getProvider, redact, type ChatTurn } from './providers';
 import { safeFetch } from '../net';
 
 /** Compact, token-friendly digest of verified facts. */
@@ -49,8 +49,8 @@ function parseJson(text: string): any {
     return JSON.parse(t);
 }
 
-export async function analyzeReport(report: ReconReport, providerId?: string): Promise<AIAnalysis> {
-    const p = getProvider(providerId);
+export async function analyzeReport(report: ReconReport, providerId?: string, byokKey?: string | null): Promise<AIAnalysis> {
+    const p = getProvider(providerId, byokKey);
     const messages: ChatTurn[] = [
         { role: 'system', content: ANALYST_SYSTEM },
         { role: 'user', content: `VERIFIED FACTS:\n${JSON.stringify(factDigest(report))}\n\nPAGE TEXT SAMPLE (truncated):\n${report.meta.textSample.slice(0, 4500)}\n\nReturn JSON exactly in this shape:\n${ANALYSIS_SHAPE}` },
@@ -74,8 +74,8 @@ export async function analyzeReport(report: ReconReport, providerId?: string): P
 }
 
 const VISION_MIME = /^image\/(png|jpe?g|webp|gif)$/i;
-export async function describeImages(srcs: string[], pageUrl: string, providerId?: string) {
-    const p = getProvider(providerId);
+export async function describeImages(srcs: string[], pageUrl: string, providerId?: string, byokKey?: string | null) {
+    const p = getProvider(providerId, byokKey);
     if (!p.describeImage) {
         return { provider: p.info.id, vision: false, results: srcs.map(src => ({ src, detailedDescription: '', error: `${p.info.label} model has no vision support — switch provider to use image analysis.` })) };
     }
@@ -90,14 +90,14 @@ export async function describeImages(srcs: string[], pageUrl: string, providerId
             const text = await p.describeImage(`This image appears on ${pageUrl}. In ONE factual sentence, describe what it visibly shows (logo, person, product, chart, text). Do not guess identities of people.`, { mime, base64: res.body.toString('base64') });
             results.push({ src, detailedDescription: text });
         } catch (e: any) {
-            results.push({ src, detailedDescription: '', error: e?.message || 'vision failed' });
+            results.push({ src, detailedDescription: '', error: redact(e?.message || 'vision failed', byokKey) });
         }
     }
     return { provider: p.info.id, vision: true, results };
 }
 
-export async function streamDebrief(report: ReconReport, history: ChatMessage[], providerId: string | undefined, onDelta: (t: string) => void) {
-    const p = getProvider(providerId);
+export async function streamDebrief(report: ReconReport, history: ChatMessage[], providerId: string | undefined, onDelta: (t: string) => void, byokKey?: string | null) {
+    const p = getProvider(providerId, byokKey);
     const system = `You are GhostWires Mk.IV's intelligence debriefing module. Answer ONLY from the verified recon report below; if the answer is not in it, say it was not observed in this scan. Be concise and defensive in framing — never provide exploitation instructions. Refer to it as "the report".\n\nREPORT FACTS:\n${JSON.stringify(factDigest(report))}\n\nCONTACTS: ${JSON.stringify(report.contacts)}\nSUBDOMAINS (CT): ${report.ct.subdomains.slice(0, 80).join(', ')}\nTECH EVIDENCE: ${JSON.stringify(report.tech)}`;
     const turns: ChatTurn[] = [{ role: 'system', content: system }, ...history.slice(-12).map(m => ({ role: (m.role === 'model' ? 'assistant' : 'user') as ChatTurn['role'], content: m.content.slice(0, 4000) }))];
     await p.stream(turns, onDelta);

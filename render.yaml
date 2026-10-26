@@ -1,0 +1,19 @@
+# One-click Render deploy (free web service) — BYOK only, no API keys are configured here.
+# Dashboard → New → Blueprint → select ymmiah/GhostWires, or use the Deploy button in README.
+services:
+  - type: web
+    name: ghostwires
+    runtime: docker
+    plan: free
+    repo: https://github.com/ymmiah/GhostWires
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: GHOSTWIRES_BYOK_ONLY
+        value: "1"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: NODE_ENV
+        value: production

@@ -1,6 +1,10 @@
 # 👻 GhostWires Mk.IV
 
-**Passive OSINT reconnaissance for websites — real data, not hallucinations.**
+[![CI](https://github.com/ymmiah/GhostWires/actions/workflows/ci.yml/badge.svg)](https://github.com/ymmiah/GhostWires/actions/workflows/ci.yml)
+[![Docker image](https://github.com/ymmiah/GhostWires/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ymmiah/GhostWires/pkgs/container/ghostwires)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ymmiah/GhostWires)
+
+**Passive OSINT reconnaissance for websites — real data, not hallucinations. Bring your own AI key; it's wiped when you close the tab.**
 
 GhostWires Mk.IV runs a deterministic, server-side OSINT pipeline against a public website (DNS, TLS, HTTP headers, technology fingerprint, public contacts, robots/sitemap/security.txt, Certificate Transparency and the Wayback Machine) and then hands those **verified facts** to an AI model of your choice — **NVIDIA NIM (free)**, Google Gemini, OpenRouter or Groq — for narrative analysis, image description and a grounded debrief chat.
 
@@ -15,6 +19,48 @@ GhostWires Mk.IV runs a deterministic, server-side OSINT pipeline against a publ
 - **Polite by design.** The crawler honours `robots.txt` (incl. `Crawl-delay`), waits ≥ 750 ms between requests, is capped at 25 pages, and every API route is rate-limited.
 - **SSRF-guarded.** Private, loopback, link-local, CGNAT, multicast and cloud-metadata addresses (e.g. `169.254.169.254`) are blocked on every redirect hop; only ports 80/443/8080/8443 are allowed.
 - **Contact data is personal data.** Minimise, protect and delete it when you're done. AI output is generated from collected facts but can still be wrong — verify against the source.
+
+---
+
+## 🔑 Bring your own key (BYOK) — wiped when you close the tab
+
+Hosted GhostWires needs **no server-side API key**. Each visitor clicks **🔑 Add API key**, picks a provider (NVIDIA NIM, Gemini, OpenRouter or Groq) and pastes their own key.
+
+How the key is protected:
+
+| Where | What happens |
+|---|---|
+| Browser storage | Kept only in React memory + **`sessionStorage`** (scoped to that one tab). Never `localStorage`, cookies, IndexedDB or the URL. |
+| Tab/window close, reload, navigate away | `pagehide` + `beforeunload` handlers **wipe the key** from sessionStorage and memory. The browser also destroys sessionStorage when the tab closes. |
+| Manual / idle | **Forget key** button wipes it instantly; it also auto-wipes after **30 minutes** of inactivity. |
+| On the wire | Sent **only** on `/api/ai/*` requests, in the `X-GhostWires-API-Key` header (+ `X-GhostWires-Provider`), to the same origin over HTTPS. Recon and crawl requests never carry it. |
+| On the server | Used for that single request to call the provider, then dropped. **Never** logged, written to disk, put in `process.env`, cached, or returned in a response; provider error messages are redacted. AI responses are `Cache-Control: no-store`. |
+| In the page | Masked input (password field, password-manager autofill disabled), never echoed to the terminal log or report export. A strict **Content-Security-Policy** (`script-src 'self'`, Tailwind compiled at build time — no CDN scripts) stops third-party JavaScript from reading it. |
+
+> ⚠️ While the tab is open, anyone with access to it can see the key in DevTools (Network tab / sessionStorage) — that is inherent to any BYOK web app. Use a dedicated, low-quota key and close the tab when finished.
+
+Self-hosters can still put keys in `.env`; set `GHOSTWIRES_BYOK_ONLY=1` (the default in the Docker image and Render blueprint) to ignore server keys entirely on a shared deployment.
+
+---
+
+## ☁️ Deploy
+
+GitHub Pages can only host static files, so GhostWires (an Express API + UI) is deployed as a container built by GitHub Actions.
+
+**1 — Render (free, one click).** Click **Deploy to Render** above (or Render → *New → Blueprint* → pick `ymmiah/GhostWires`). `render.yaml` builds the `Dockerfile`, runs it BYOK-only with `TRUST_PROXY=1`, health-checks `/api/health` and redeploys on every push to `main`. No secrets to set.
+
+**2 — Docker (any host / your PC).** Every push to `main` publishes an image to GitHub Container Registry:
+
+```bash
+docker run --rm -p 3000:3000 ghcr.io/ymmiah/ghostwires:latest
+# open http://localhost:3000 and add your own key
+```
+
+Tags: `latest`, `sha-<short>` and `v*` release tags. The image contains **no** API keys or `.env`, runs as the non-root `node` user and has a health check.
+
+**3 — From source:** see *Quick start* below.
+
+CI (`.github/workflows/ci.yml`) type-checks, builds, boots the server without any keys and asserts the health endpoint and SSRF guard on every push and pull request.
 
 ---
 
@@ -73,7 +119,7 @@ NVIDIA_API_KEY=nvapi-... npm run dev
 GEMINI_API_KEY=...       npm run dev
 ```
 
-No key? The deterministic OSINT pipeline still works fully — only the AI tabs are disabled.
+No server key? That's fine — click **🔑 Add API key** in the UI (BYOK), or skip AI entirely: the deterministic OSINT pipeline works without any key.
 
 ### Production
 
@@ -100,13 +146,13 @@ curl http://localhost:3000/api/health
 | OpenRouter | `OPENROUTER_API_KEY` | `google/gemma-4-31b-it:free` | ❌ | Any `:free` model works — set `OPENROUTER_MODEL`. |
 | Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | ❌ | Very fast free tier. |
 
-**Choosing a provider:** set `AI_PROVIDER=nim|gemini|openrouter|groq`. If unset, GhostWires uses Gemini when `GEMINI_API_KEY` exists, otherwise NIM when `NVIDIA_API_KEY` exists, then OpenRouter, then Groq. You can also switch between any configured provider live from the **AI provider** dropdown in the UI; providers without vision show *"Vision n/a"* and image analysis is disabled gracefully.
+**Choosing a provider:** visitors pick one in the 🔑 dialog (BYOK keys always win). For self-hosted server keys set `AI_PROVIDER=nim|gemini|openrouter|groq`; if unset, GhostWires uses Gemini when `GEMINI_API_KEY` exists, otherwise NIM when `NVIDIA_API_KEY` exists, then OpenRouter, then Groq. Providers without vision show *"Vision n/a"* and image analysis is disabled gracefully.
 
 ### Getting a free NVIDIA NIM key
 
 1. Go to **[build.nvidia.com](https://build.nvidia.com)** and sign in / create a free NVIDIA developer account.
 2. Open any model page (e.g. *meta/llama-3.2-11b-vision-instruct*) and click **Get API Key** (or visit your profile → *API Keys*).
-3. Copy the key (starts with `nvapi-`) into `.env` as `NVIDIA_API_KEY=nvapi-...`.
+3. Paste the key (starts with `nvapi-`) into the **🔑 Add API key** dialog — or, when self-hosting, put it in `.env` as `NVIDIA_API_KEY=nvapi-...`.
 4. Optional: pick another hosted model with `NIM_MODEL=` (e.g. `openai/gpt-oss-20b` for stronger reasoning; slower) and `NIM_VISION_MODEL=`.
 
 Free endpoints can queue under load — Mk.IV waits up to `AI_TIMEOUT_MS` (default 180 s) and the UI shows progress.
@@ -123,7 +169,9 @@ See [`.env.example`](.env.example). Highlights:
 | `NVIDIA_API_KEY`, `NIM_MODEL`, `NIM_VISION_MODEL`, `NIM_BASE_URL` | NVIDIA NIM |
 | `GEMINI_API_KEY` / `API_KEY`, `GEMINI_MODEL` | Google Gemini |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `GROQ_API_KEY`, `GROQ_MODEL` | Optional free paths |
-| `PORT`, `HOST` | Server bind (default `0.0.0.0:3000`) |
+| `GHOSTWIRES_BYOK_ONLY=1` | Ignore all server keys; visitors must bring their own (default in Docker/Render) |
+| `TRUST_PROXY` | Set to `1` behind Render/Fly/NGINX so rate limits use the real client IP |
+| `PORT`, `HOST` | Server bind (default `0.0.0.0:3000`; Render injects `PORT`) |
 | `DNS_MODE=doh`, `DNS_SERVERS`, `DOH_URL` | DNS resolution behaviour |
 | `GHOSTWIRES_ALLOW_FAKEIP=1` | Only for local VPN/TUN "fake-ip" setups that answer DNS with `198.18.0.0/15`. Never enable on a shared server. |
 
@@ -137,12 +185,13 @@ See [`.env.example`](.env.example). Highlights:
 | GET | `/api/providers` | – | configured providers, models, vision support |
 | POST | `/api/recon` | `{ url, ct?: true, wayback?: true }` | `ReconReport` (see `types.ts`) |
 | POST | `/api/crawl` | `{ url, maxPages?: 12 }` | `CrawlResult` |
+| POST | `/api/ai/verify` | – (key in header) | checks a BYOK key with a tiny completion (≤ 20 s) |
 | POST | `/api/ai/analyze` | `{ report, provider? }` | `AIAnalysis` |
 | POST | `/api/ai/vision` | `{ images: string[], pageUrl, provider? }` | descriptions per image |
 | POST | `/api/ai/chat` | `{ report, messages, provider? }` | streamed plain text |
 | GET | `/api/proxy?url=` | – | SSRF-guarded image proxy (non-images returned as inert text) |
 
-Rate limits (per IP): recon 10/min, crawl 3/min, AI 20/min, proxy 120/min.
+All `/api/ai/*` routes accept the BYOK headers `X-GhostWires-API-Key` and `X-GhostWires-Provider`. Rate limits (per IP): recon 10/min, crawl 3/min, AI 20/min, key verify 10/min, proxy 120/min.
 
 ---
 
@@ -164,13 +213,17 @@ server/
   ai/providers.ts       Gemini + OpenAI-compatible (NIM / OpenRouter / Groq)
   ai/intel.ts           fact digest, analysis, vision, grounded chat
 App.tsx, api.ts         React UI + API client
+keyVault.ts             BYOK vault: sessionStorage + memory, wipe on close/idle/forget
+components/KeyModal.tsx masked BYOK dialog with key verification
+Dockerfile, render.yaml container image + Render blueprint
+.github/workflows/      CI (typecheck/build/smoke) + GHCR image publish
 components/             tabs, cards, crawl graph, chat, terminal log
 types.ts                shared types (server + client)
 ```
 
 ## 🧱 Stack
 
-React 18 · Vite 6 · Express 5 · TypeScript · cheerio · `@google/genai` · Tailwind (CDN) · Node built-ins (`dns`, `tls`, `net`, `fetch`).
+React 18 · Vite 6 · Express 5 · TypeScript · cheerio · `@google/genai` · Tailwind CSS 3 (compiled, no CDN) · Node built-ins (`dns`, `tls`, `net`, `fetch`).
 
 ## Known limitations
 
