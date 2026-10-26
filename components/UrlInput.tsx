@@ -33,11 +33,11 @@ export const UrlInput: React.FC<UrlInputProps> = ({ url, setUrl, onExtract, isLo
             <div className="flex items-center flex-grow bg-hacker-dark border border-hacker-green/30 rounded-sm">
                  <div className="pl-3 pr-2"><TerminalIcon /></div>
                  <input
-                    type="url"
+                    type="text"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Enter target URL..."
+                    placeholder="Enter authorised target URL or domain (e.g. example.com)..."
                     className="w-full bg-transparent p-2 text-hacker-green placeholder-hacker-green/40 focus:outline-none caret-hacker-green"
                     disabled={isLoading}
                     spellCheck="false"

@@ -1,7 +1,9 @@
 {
-  "name": "Ghostwire Mk.III",
-  "description": "Ghostwire Mk.III is a generative AI-powered tool for advanced website reconnaissance. Analyze a target URL to extract technical, content, and linguistic intelligence, providing deep insights into a brand or person's online presence.",
+  "name": "GhostWires Mk.IV",
+  "description": "GhostWires Mk.IV is a passive OSINT reconnaissance tool: real DNS, TLS, HTTP header, technology, contact, robots/sitemap, Certificate Transparency and Wayback intelligence, with AI-grounded analysis (NVIDIA NIM, Gemini, OpenRouter, Groq). Authorised targets only.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ],
   "prompt": ""
 }

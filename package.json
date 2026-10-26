@@ -1,16 +1,18 @@
 {
-  "name": "ghostwire-mk.iii",
+  "name": "ghostwires-mk4",
   "private": true,
-  "version": "0.0.0",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist-server/server.cjs",
+    "start": "node dist-server/server.cjs",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
     "@google/genai": "^1.8.0",
+    "cheerio": "^1.2.0",
     "express": "^5.2.1",
     "react": "18.2.0",
     "react-dom": "18.2.0"
@@ -18,10 +20,17 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.14.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.0.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.12",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "description": "GhostWires Mk.IV \u2014 passive OSINT reconnaissance (DNS, TLS, headers, tech fingerprint, contacts, CT logs, Wayback) with AI-grounded analysis via NVIDIA NIM, Gemini, OpenRouter or Groq.",
+  "author": "Yasin Mohammed Miah, Student of BCU, BSc Computing Top-Up (Hons)",
+  "engines": {
+    "node": ">=20.12"
   }
 }

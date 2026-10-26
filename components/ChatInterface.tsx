@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { ChatMessage, ExtractionResult } from '../types';
+import type { ChatMessage, ReconReport } from '../types';
 
 interface ChatInterfaceProps {
     messages: ChatMessage[];
     onSendMessage: (message: string) => void;
     isLoading: boolean;
-    result: ExtractionResult | null;
+    result: ReconReport | null;
+    providerLabel?: string;
+    disabledReason?: string | null;
 }
 
 const SendIcon = () => (
@@ -18,7 +20,7 @@ const ChatIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-
 
 const TypingIndicator = () => (
     <div className="flex items-center space-x-2">
-        <span className="text-sm text-hacker-green/70">&gt; [Ghostwire Mk.III]: </span>
+        <span className="text-sm text-hacker-green/70">&gt; [GhostWires Mk.IV]: </span>
         <div className="flex space-x-1 items-center h-full">
           <div className="w-2 h-2 bg-hacker-green rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
           <div className="w-2 h-2 bg-hacker-green rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
@@ -27,7 +29,7 @@ const TypingIndicator = () => (
     </div>
 );
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isLoading, result }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, isLoading, result, providerLabel, disabledReason }) => {
     const [input, setInput] = useState('');
     const [suggestedPrompts, setSuggestedPrompts] = useState<string[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -35,19 +37,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMe
     useEffect(() => {
         if (result) {
             const prompts = new Set<string>();
-            prompts.add("Summarize the key findings from the report.");
-            if (result.advancedRecon?.vulnerabilities && result.advancedRecon.vulnerabilities.length > 0) {
-                prompts.add("What are the most critical security vulnerabilities found?");
-            }
-            if (result.contentLanguage?.sentiment) {
-                 prompts.add("What is the overall sentiment of this page?");
-            }
-             if (result.contentLanguage?.keyTopics && result.contentLanguage.keyTopics.length > 0) {
-                prompts.add("What are the key topics discussed?");
-            }
-            if (result.advancedRecon.technologies && result.advancedRecon.technologies.length > 0) {
-                prompts.add("Describe the technology stack used.");
-            }
+            prompts.add("Summarise the key findings from the report.");
+            if (result.headers.findings.some(f => !f.present)) prompts.add("Which security headers are missing and why do they matter?");
+            if (result.dns.emailSecurity.findings.length) prompts.add("How strong is this domain's email authentication?");
+            if (result.tech.length) prompts.add("Describe the technology stack and hosting.");
+            if (result.ct.subdomains.length) prompts.add("What does the subdomain footprint suggest?");
             setSuggestedPrompts(Array.from(prompts).slice(0, 4));
         }
     }, [result]);
@@ -78,10 +72,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMe
     };
 
     return (
-        <div className="bg-hacker-dark-2 border border-cyber-blue/30 flex flex-col h-[55vh] max-h-[700px]">
+        <div className="bg-hacker-dark-2 border border-cyber-blue/30 flex flex-col h-[50vh] max-h-[640px]">
             <div className="px-2 py-1 bg-hacker-dark-2 border-b border-cyber-blue/30 flex items-center space-x-2">
                 <div className="text-cyber-blue flex-shrink-0"><ChatIcon /></div>
                 <h3 className="font-bold text-base text-hacker-green uppercase tracking-wider truncate" title="// Intelligence Debriefing">// Intelligence Debriefing</h3>
+                {providerLabel && <span className="ml-auto text-[10px] text-text-secondary">grounded on report · {providerLabel}</span>}
             </div>
 
             <div className="flex-grow p-2 overflow-y-auto space-y-2">
@@ -89,9 +84,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMe
                     <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                         <div className={`max-w-2xl px-2 py-1 rounded-lg text-sm ${msg.role === 'user' ? 'bg-hacker-green/10' : 'bg-hacker-dark'}`}>
                            {msg.role === 'user' ? (
-                               <span className="font-bold text-hacker-green">[user@ghostwire]~$ </span>
+                               <span className="font-bold text-hacker-green">[user@ghostwires]~$ </span>
                            ) : (
-                               <span className="font-bold text-cyber-blue">&gt; [Ghostwire Mk.III]: </span>
+                               <span className="font-bold text-cyber-blue">&gt; [GhostWires Mk.IV]: </span>
                            )}
                            <span className="text-text-primary whitespace-pre-wrap">
                                 {msg.content}
@@ -108,7 +103,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMe
                 <div ref={messagesEndRef} />
             </div>
             
-            {messages.length === 0 && suggestedPrompts.length > 0 && (
+            {messages.length === 0 && suggestedPrompts.length > 0 && !disabledReason && (
                 <div className="p-1 border-t border-cyber-blue/30">
                     <p className="text-xs text-text-secondary mb-1">Suggested Prompts:</p>
                     <div className="flex flex-wrap gap-1">
@@ -128,13 +123,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMe
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={isLoading ? "Awaiting response..." : "Debrief Ghostwire on the report..."}
+                        placeholder={disabledReason || (isLoading ? "Awaiting response..." : "Debrief GhostWires on the report...")}
                         className="w-full bg-hacker-dark p-2 text-hacker-green placeholder-hacker-green/40 focus:outline-none caret-hacker-green border border-hacker-green/30 rounded-sm focus:border-cyber-blue"
-                        disabled={isLoading}
+                        disabled={isLoading || !!disabledReason}
                     />
                     <button
                         onClick={handleSend}
-                        disabled={isLoading || !input.trim()}
+                        disabled={isLoading || !input.trim() || !!disabledReason}
                         className="shrink-0 flex items-center justify-center bg-hacker-green/10 hover:bg-cyber-blue/20 text-hacker-green hover:text-cyber-blue font-bold py-2 px-4 border border-hacker-green hover:border-cyber-blue transition-all duration-300 disabled:bg-hacker-dark-2 disabled:text-hacker-green/40 disabled:border-hacker-green/40 disabled:cursor-not-allowed disabled:shadow-none rounded-sm"
                     >
                         <SendIcon />

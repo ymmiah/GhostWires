@@ -1,453 +1,369 @@
-import React from 'react';
-import type { ExtractionResult, ExtractedLink, AdvancedReconResult, OSINTResult, Technology, Vulnerability, AccessibilityIssue, SEOPerformanceResult, PageContent, CMSPlugin, Person } from '../types';
-import { CopyToClipboard } from './CopyToClipboard';
-import { ContentLanguageCard } from './ContentLanguageCard';
-import { AccessibilityCard } from './AccessibilityCard';
+import React, { useState } from 'react';
+import type { ReconReport, AIAnalysis, CrawlResult, ProviderInfo } from '../types';
 import { Card } from './Card';
-import { createAbsoluteUrl } from '../utils';
+import { KV, Chip, CopyList, Score, Stat, sevTone } from './ui';
+import { CrawlGraph } from './CrawlGraph';
+import { CopyToClipboard } from './CopyToClipboard';
 
-interface ResultsDisplayProps {
-    result: ExtractionResult;
-    baseUrl: string;
-    onAnalyzeImages: () => Promise<void>;
+interface Props {
+    report: ReconReport;
+    analysis: AIAnalysis | null;
+    aiState: { loading: boolean; error: string | null };
+    onRunAI: () => void;
+    provider: ProviderInfo | null;
+    crawl: CrawlResult | null;
+    isCrawling: boolean;
+    onCrawl: (maxPages: number) => void;
+    imageNotes: Record<string, { text: string; error?: string }>;
     isAnalyzingImages: boolean;
+    onAnalyzeImages: (srcs: string[]) => void;
     onDownloadReport: () => void;
     onNewScan: () => void;
-    proxyBuilder: (url: string) => string;
-    onCrawlSite: () => void;
-    isCrawling: boolean;
-    crawledPages: PageContent[];
 }
 
-// Icons
-const MetaIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>;
-const SummaryIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>;
-const TextIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" /></svg>;
-const ImageIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><circle cx="12" cy="13" r="3" /></svg>;
-const LinkIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>;
-const SiteCrawlerIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2h1a2 2 0 002-2v-1a2 2 0 012-2h1.945M7.884 5.06l.542.903a2 2 0 001.76 1.037h1.628a2 2 0 001.76-1.037l.542-.903M12 20.945V18m-8.116-4.945a2 2 0 01-2.242 0C.734 14.542 0 12.863 0 11c0-3.866 3.582-7 8-7s8 3.134 8 7c0 1.863-.734 3.542-1.884 4.945a2 2 0 01-2.242 0" /></svg>;
-const SparklesIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M17 3v4M19 5h-4M12 3v4M10 5h4M5 17v4M3 19h4M17 17v4M19 19h-4M12 17v4M10 19h4" /></svg>;
-const AdvancedReconIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 117.07-7.071" /></svg>;
-const OSINTIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>;
-const VulnerabilityIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
-const DownloadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
-const SeoIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>;
-const PerfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
-const NewScanIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 20h5v-5M20 4h-5v5" /></svg>
+const TABS = ['Overview', 'Network', 'Headers', 'Tech', 'Contacts', 'Surface', 'Content', 'Crawl', 'AI Intel'] as const;
+type Tab = typeof TABS[number];
 
-const hasOsintData = (osint?: OSINTResult): boolean => {
-    if (!osint) return false;
-    return osint.emails.length > 0 || osint.phoneNumbers.length > 0 || osint.addresses.length > 0 || osint.peopleLinked?.length > 0 || (osint.socialLinks && Object.values(osint.socialLinks).some(v => v));
-}
+const btn = 'flex items-center gap-1 text-xs bg-hacker-dark hover:bg-hacker-dark-2 text-hacker-green font-bold py-1 px-3 border border-hacker-green/50 transition-all hover:text-cyber-blue hover:border-cyber-blue rounded-sm disabled:opacity-40 disabled:cursor-not-allowed';
+const I = (d: string) => () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>;
+const GlobeIcon = I('M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18');
+const LockIcon = I('M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z');
+const ShieldIcon = I('M9 12l2 2 4-4m5.6-4A12 12 0 0112 2.9 12 12 0 013.4 6 12 12 0 0012 21a12 12 0 008.6-15z');
+const ChipIcon = I('M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z');
+const UserIcon = I('M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z');
+const RadarIcon = I('M5.6 18.4a9 9 0 010-12.8m12.8 0a9 9 0 010 12.8m-9.9-2.8a5 5 0 117-7');
+const DocIcon = I('M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.6a1 1 0 01.7.3l5.4 5.4a1 1 0 01.3.7V19a2 2 0 01-2 2z');
+const SpiderIcon = I('M13.8 10.2a4 4 0 00-5.6 0l-4 4a4 4 0 105.6 5.6l1.1-1.1m-.8-4.9a4 4 0 005.7 0l4-4a4 4 0 00-5.7-5.6l-1.1 1.1');
+const BrainIcon = I('M9.7 17h4.6M12 3v1m6.4 1.6l-.7.7M21 12h-1M4 12H3m3.3-5.7l-.7-.7m2.8 9.9a5 5 0 117.1 0l-.5.5A3.4 3.4 0 0014 18.5V19a2 2 0 11-4 0v-.5c0-.9-.4-1.8-1-2.4l-.5-.5z');
+const MailIcon = I('M3 8l7.9 5.3a2 2 0 002.2 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z');
 
-const hasAdvancedReconData = (recon?: AdvancedReconResult): boolean => {
-    if (!recon) return false;
-    return (
-        (recon.owner && recon.owner !== 'N/A') ||
-        (recon.hostingPlatform && recon.hostingPlatform !== 'N/A') ||
-        (recon.serverIP && recon.serverIP !== 'N/A') ||
-        (recon.platform && recon.platform !== 'N/A') ||
-        (recon.waf && recon.waf !== 'N/A') ||
-        (recon.technologies && recon.technologies.length > 0) ||
-        (recon.vulnerabilities && recon.vulnerabilities.length > 0)
-    );
-}
+const proxied = (src: string) => `/api/proxy?url=${encodeURIComponent(src)}`;
 
-const DataListItem: React.FC<{ item: string, copyable?: boolean }> = ({ item, copyable }) => (
-    <li className="flex items-center justify-between py-0.5">
-        <span className="truncate">{item}</span>
-        {copyable && <CopyToClipboard textToCopy={item} />}
-    </li>
-);
-
-const getSeverityClass = (severity: Vulnerability['severity']) => {
-    switch (severity) {
-        case 'Critical': return 'bg-hacker-red text-white';
-        case 'High': return 'bg-red-500 text-white';
-        case 'Medium': return 'bg-yellow-500 text-hacker-dark';
-        case 'Low': return 'bg-hacker-green/40 text-text-primary';
-        default: return 'bg-gray-500 text-text-primary';
-    }
-};
-
-const getSeverityBorderClass = (severity: Vulnerability['severity']) => {
-    switch (severity) {
-        case 'Critical': return 'border-hacker-red';
-        case 'High': return 'border-red-500';
-        case 'Medium': return 'border-yellow-500';
-        case 'Low': return 'border-hacker-green/40';
-        default: return 'border-gray-500';
-    }
-};
-
-const ReconDataItem: React.FC<{label: string, value: React.ReactNode, copyableValue?: string}> = ({label, value, copyableValue}) => (
-   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
-       <strong className="text-hacker-green">{label}:</strong>
-       <div className="flex items-center min-w-0">
-           <span className="text-text-primary break-words">{value || 'N/A'}</span>
-           {copyableValue && copyableValue !== 'N/A' && <CopyToClipboard textToCopy={copyableValue} />}
-       </div>
-   </div>
-);
-
-const ReportControls: React.FC<{onDownloadReport: () => void; onNewScan: () => void}> = ({onDownloadReport, onNewScan}) => {
-    const buttonClass = "flex items-center text-sm bg-hacker-dark hover:bg-hacker-dark-2 text-hacker-green font-bold py-1 px-3 border border-hacker-green/50 transition-all duration-300 hover:shadow-glow-blue hover:text-cyber-blue hover:border-cyber-blue rounded-sm";
-    return (
-        <div className="flex items-center gap-2">
-             <button onClick={onNewScan} className={buttonClass} title="Start New Scan">
-                <NewScanIcon />
-                <span className="ml-1 hidden sm:inline">New Scan</span>
-            </button>
-            <button onClick={onDownloadReport} className={buttonClass} title="Download Full JSON Report">
-                <DownloadIcon />
-                <span className="ml-1 hidden sm:inline">Report</span>
-            </button>
-        </div>
-    );
-}
-
-const LinkAnalysisCard: React.FC<{ links: ExtractedLink[]; baseUrl: string; }> = ({ links, baseUrl }) => {
-    const internalLinks = links.filter(l => l.type === 'internal');
-    const externalLinks = links.filter(l => l.type === 'external');
-    const socialLinks = links.filter(l => l.type === 'social');
-    const totalLinks = links.length;
-
-    const renderLinkList = (linkList: ExtractedLink[]) => (
-        <div className="max-h-48 overflow-y-auto pr-2 space-y-1 text-sm mt-1">
-            {linkList.map((link, i) => (
-                <a key={i} href={createAbsoluteUrl(link.href, baseUrl)} target="_blank" rel="noopener noreferrer" className="block text-hacker-green hover:underline truncate" title={createAbsoluteUrl(link.href, baseUrl)}>
-                    {link.text || link.href}
-                </a>
-            ))}
-        </div>
-    );
-    
-    if (totalLinks === 0) {
-        return <p className="text-text-secondary">No significant links found.</p>;
-    }
+export const ResultsDisplay: React.FC<Props> = (p) => {
+    const { report: r } = p;
+    const [tab, setTab] = useState<Tab>('Overview');
+    const [crawlSize, setCrawlSize] = useState(12);
+    const missingHeaders = r.headers.findings.filter(f => !f.present);
+    const internal = r.links.filter(l => l.type === 'internal');
+    const external = r.links.filter(l => l.type === 'external');
 
     return (
-        <div className="space-y-1">
-            <div>
-                <div className="w-full flex h-3 rounded-sm overflow-hidden bg-hacker-dark">
-                    <div className="bg-hacker-green" style={{ width: `${(internalLinks.length / totalLinks) * 100}%` }} title="Internal Links"></div>
-                    <div className="bg-sky-500" style={{ width: `${(externalLinks.length / totalLinks) * 100}%` }} title="External Links"></div>
-                    <div className="bg-purple-500" style={{ width: `${(socialLinks.length / totalLinks) * 100}%` }} title="Social Links"></div>
-                </div>
-                <div className="flex justify-between text-xs mt-1 text-text-secondary">
-                    <span><span className="text-hacker-green">●</span> Internal ({internalLinks.length})</span>
-                    <span><span className="text-sky-500">●</span> External ({externalLinks.length})</span>
-                    <span><span className="text-purple-500">●</span> Social ({socialLinks.length})</span>
-                </div>
-            </div>
-            <details className="text-text-primary" open>
-                <summary className="cursor-pointer font-bold text-hacker-green hover:underline">Internal Links ({internalLinks.length})</summary>
-                {renderLinkList(internalLinks)}
-            </details>
-            <details className="text-text-primary">
-                <summary className="cursor-pointer font-bold text-hacker-green hover:underline">External Links ({externalLinks.length})</summary>
-                {renderLinkList(externalLinks)}
-            </details>
-            <details className="text-text-primary">
-                <summary className="cursor-pointer font-bold text-hacker-green hover:underline">Social Links ({socialLinks.length})</summary>
-                {renderLinkList(socialLinks)}
-            </details>
-        </div>
-    );
-}
-
-const SEOPerformanceCard: React.FC<{data: SEOPerformanceResult}> = ({data}) => {
-    return (
-        <div className="text-sm space-y-1 text-text-primary">
-            <ReconDataItem label="Title Tag" value={data.titleTag} copyableValue={data.titleTag} />
-            <ReconDataItem label="Word Count" value={data.wordCount} />
-            {data.h1Tags && data.h1Tags.length > 0 && (
-                <div>
-                    <strong className="text-hacker-green">H1 Tags:</strong>
-                    <ul className="list-disc list-inside ml-2">
-                        {data.h1Tags.map((tag, i) => <li key={i}>{tag}</li>)}
-                    </ul>
-                </div>
-            )}
-            {data.socialMeta && (
-                <div className="pt-1 border-t border-hacker-green/30">
-                     <strong className="text-hacker-green">Social Meta:</strong>
-                     <div className="pl-2 space-y-0.5 text-xs">
-                        <ReconDataItem label="OG:Title" value={data.socialMeta.ogTitle} />
-                        <ReconDataItem label="OG:Description" value={data.socialMeta.ogDescription} />
-                     </div>
-                </div>
-            )}
-            {data.performanceHints && data.performanceHints.length > 0 && (
-                 <div className="pt-1 border-t border-hacker-green/30">
-                    <strong className="text-hacker-green flex items-center gap-1"><PerfIcon /> Performance Hints:</strong>
-                    <ul className="list-disc list-inside ml-2 text-xs">
-                        {data.performanceHints.map((hint, i) => <li key={i}>{hint}</li>)}
-                    </ul>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const AdvancedReconCard: React.FC<{data: AdvancedReconResult}> = ({data}) => (
-    <div className="text-sm space-y-1 text-text-primary">
-        <ReconDataItem label="Owner" value={data.owner} copyableValue={data.owner} />
-        <ReconDataItem label="Host" value={data.hostingPlatform} copyableValue={data.hostingPlatform} />
-        <ReconDataItem label="Platform" value={data.platform} copyableValue={data.platform} />
-        <ReconDataItem label="Server IP" value={data.serverIP} copyableValue={data.serverIP} />
-        {data.serverLocation && <ReconDataItem label="Location" value={`${data.serverLocation.city}, ${data.serverLocation.country}`} />}
-        {data.waf && <ReconDataItem label="WAF" value={data.waf} />}
-        {data.cmsTheme && <ReconDataItem label="CMS Theme" value={`${data.cmsTheme.name} ${data.cmsTheme.version || ''}`} />}
-        
-        {data.technologies && data.technologies.length > 0 && (
-            <div className="pt-1 border-t border-hacker-green/30">
-                <strong className="text-hacker-green">Technologies:</strong>
-                 <div className="flex flex-wrap gap-1 mt-1">
-                    {data.technologies.map((tech, i) => <span key={i} className="bg-hacker-dark text-xs text-text-secondary px-2 py-0.5 rounded">{tech.name} {tech.version}</span>)}
-                </div>
-            </div>
-        )}
-        {data.cmsPlugins && data.cmsPlugins.length > 0 && (
-            <div className="pt-1 border-t border-hacker-green/30">
-                <strong className="text-hacker-green">CMS Plugins:</strong>
-                 <div className="max-h-24 overflow-y-auto pr-2">
-                    <ul className="text-xs text-text-secondary">
-                        {data.cmsPlugins.map((plugin: CMSPlugin, i) => <li key={i}>{plugin.name} {plugin.version || ''}</li>)}
-                    </ul>
-                </div>
-            </div>
-        )}
-
-        {data.vulnerabilities && data.vulnerabilities.length > 0 && (
-            <div className="pt-1 border-t border-hacker-green/30">
-                <strong className="text-hacker-green flex items-center gap-1"><VulnerabilityIcon /> Potential Vulnerabilities:</strong>
-                <div className="space-y-1 mt-1 max-h-40 overflow-y-auto pr-2">
-                    {data.vulnerabilities.map((vuln, i) => (
-                        <div key={i} className={`bg-hacker-dark p-1 text-xs border-l-2 ${getSeverityBorderClass(vuln.severity)}`}>
-                            <div className="flex justify-between items-center">
-                                <strong className="text-text-primary">{vuln.cve}</strong>
-                                <span className={`px-2 py-0.5 text-xs rounded-full ${getSeverityClass(vuln.severity)}`}>{vuln.severity}</span>
-                            </div>
-                            <p className="text-text-secondary">{vuln.description}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        )}
-    </div>
-);
-
-const OsintCard: React.FC<{data: OSINTResult}> = ({data}) => (
-    <div className="text-sm space-y-1 text-text-primary">
-        {data.emails.length > 0 && (
-            <div>
-                <strong className="text-hacker-green">Emails:</strong>
-                <ul className="text-xs max-h-20 overflow-y-auto pr-2">{data.emails.map(e => <DataListItem key={e} item={e} copyable />)}</ul>
-            </div>
-        )}
-        {data.phoneNumbers.length > 0 && (
-            <div>
-                <strong className="text-hacker-green">Phone Numbers:</strong>
-                <ul className="text-xs max-h-20 overflow-y-auto pr-2">{data.phoneNumbers.map(p => <DataListItem key={p} item={p} copyable />)}</ul>
-            </div>
-        )}
-        {data.peopleLinked.length > 0 && (
-             <div>
-                <strong className="text-hacker-green">People Linked:</strong>
-                <ul className="text-xs max-h-20 overflow-y-auto pr-2">
-                    {data.peopleLinked.map((p: Person) => <DataListItem key={p.name} item={`${p.name} - ${p.title}`} />)}
-                </ul>
-            </div>
-        )}
-        {data.socialLinks && Object.values(data.socialLinks).some(v => v) && (
-            <div>
-                <strong className="text-hacker-green">Social Links:</strong>
-                <ul className="text-xs max-h-20 overflow-y-auto pr-2">
-                    {Object.entries(data.socialLinks).map(([key, value]) => value ? <DataListItem key={key} item={`${key}: ${value}`} /> : null)}
-                </ul>
-            </div>
-        )}
-    </div>
-);
-
-
-export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
-    result,
-    baseUrl,
-    onAnalyzeImages,
-    isAnalyzingImages,
-    onDownloadReport,
-    onNewScan,
-    proxyBuilder,
-    onCrawlSite,
-    isCrawling,
-    crawledPages
-}) => {
-    const { 
-        summary, 
-        mainContent, 
-        metaDescription,
-        metaKeywords, 
-        images, 
-        links, 
-        advancedRecon, 
-        osint,
-        seoPerformance,
-        accessibilityIssues,
-        accessibilityScore,
-        contentLanguage
-    } = result;
-
-    return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             <div className="flex justify-between items-center flex-wrap gap-2">
-                <h2 className="text-2xl text-cyber-blue font-bold text-shadow-glow-blue">Reconnaissance Report</h2>
-                <ReportControls onDownloadReport={onDownloadReport} onNewScan={onNewScan} />
+                <div>
+                    <h2 className="text-2xl text-cyber-blue font-bold text-shadow-glow-blue">Reconnaissance Report</h2>
+                    <p className="text-xs text-text-secondary">{r.engine} · {r.target.finalUrl} · {new Date(r.generatedAt).toLocaleString()} · {(r.durationMs / 1000).toFixed(1)}s</p>
+                </div>
+                <div className="flex gap-2">
+                    <button className={btn} onClick={p.onNewScan}>New Scan</button>
+                    <button className={btn} onClick={p.onDownloadReport}>Export JSON</button>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                
-                <div className="lg:col-span-2">
-                    <Card title="Executive Summary" icon={<SummaryIcon />} bodyClassName="text-sm text-text-primary">
-                        <p>{summary || 'No summary available.'}</p>
-                    </Card>
-                </div>
+            <div className="flex flex-wrap gap-1 border-b border-hacker-green/30" role="tablist">
+                {TABS.map(t => (
+                    <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
+                        className={`px-3 py-1 text-xs sm:text-sm uppercase tracking-wider border-t border-x -mb-px ${tab === t ? 'bg-hacker-dark-2 text-cyber-blue border-cyber-blue/60' : 'text-hacker-green/70 border-transparent hover:text-hacker-green'}`}>
+                        {t}{t === 'AI Intel' && p.aiState.loading ? ' …' : ''}
+                    </button>
+                ))}
+            </div>
 
-                <Card title="Meta Intelligence" icon={<MetaIcon />} bodyClassName="text-sm text-text-primary">
-                     <div className="space-y-1">
-                        <ReconDataItem label="Description" value={metaDescription} />
-                        <div>
-                            <strong className="text-hacker-green">Keywords:</strong>
-                            {metaKeywords && metaKeywords.length > 0 ? (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                    {metaKeywords.map((kw, i) => <span key={i} className="bg-hacker-dark text-xs text-text-secondary px-2 py-0.5 rounded">{kw}</span>)}
-                                </div>
-                            ) : <span className="text-text-secondary ml-2">None Found</span>}
-                        </div>
+            {r.notes.length > 0 && (
+                <div className="border border-yellow-500/40 bg-yellow-500/5 text-yellow-300 text-xs p-2 space-y-0.5">{r.notes.map(n => <p key={n}>⚠ {n}</p>)}</div>
+            )}
+
+            {tab === 'Overview' && (
+                <div className="space-y-3 animate-fade-in">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                        <Stat label="HTTP status" value={r.target.status} tone={r.target.status < 400 ? 'text-hacker-green' : 'text-hacker-red'} />
+                        <Stat label="Header grade" value={r.headers.grade} tone={r.headers.score >= 65 ? 'text-hacker-green' : 'text-hacker-red'} />
+                        <Stat label="TLS days left" value={r.tls.daysRemaining ?? '—'} tone={(r.tls.daysRemaining ?? 0) > 14 ? 'text-hacker-green' : 'text-hacker-red'} />
+                        <Stat label="Technologies" value={r.tech.length} />
+                        <Stat label="Emails / phones" value={`${r.contacts.emails.length}/${r.contacts.phones.length}`} />
+                        <Stat label="Social profiles" value={r.contacts.socials.length} />
+                        <Stat label="CT subdomains" value={r.ct.enabled ? r.ct.subdomains.length : 'off'} />
+                        <Stat label="A11y score" value={r.accessibility.score} tone={r.accessibility.score >= 80 ? 'text-hacker-green' : 'text-yellow-400'} />
                     </div>
-                </Card>
-                
-                {seoPerformance && (
-                     <Card title="SEO Performance" icon={<SeoIcon />}>
-                        <SEOPerformanceCard data={seoPerformance} />
-                     </Card>
-                 )}
-                
-                <div className="lg:col-span-4">
-                    <Card title="Key Content Extraction" icon={<TextIcon />} bodyClassName="text-sm text-text-primary max-h-60 overflow-y-auto">
-                        <p className="whitespace-pre-wrap">{mainContent || 'No main content extracted.'}</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                        <Card title="Target" icon={<GlobeIcon />}>
+                            <KV label="Input" value={r.target.input} />
+                            <KV label="Final URL" value={r.target.finalUrl} copy={r.target.finalUrl} />
+                            <KV label="Registrable domain" value={r.target.registrableDomain} />
+                            <KV label="Resolved IPs" value={r.dns.a.concat(r.dns.aaaa).join(', ') || r.target.resolvedIPs.join(', ')} />
+                            <KV label="Content" value={`${r.target.contentType} · ${(r.target.bytes / 1024).toFixed(1)} KB · ${r.target.responseTimeMs} ms`} />
+                            {r.target.redirectChain.length > 0 && <KV label="Redirects" value={r.target.redirectChain.map(h => `${h.status} ${h.url}`).join(' → ')} />}
+                            <KV label="Title" value={r.meta.title} />
+                            <KV label="Description" value={r.meta.description} />
+                        </Card>
+                        <Card title="AI Executive Summary" icon={<BrainIcon />}>
+                            {p.analysis ? <p className="text-sm text-text-primary">{p.analysis.summary}</p>
+                                : p.aiState.loading ? <p className="text-sm text-text-secondary">Analysing verified facts with {p.provider?.label}…</p>
+                                : <p className="text-sm text-text-secondary">{p.aiState.error || 'AI layer idle.'} <button className="underline text-cyber-blue" onClick={p.onRunAI} disabled={!p.provider?.configured}>Run AI analysis</button></p>}
+                            {p.analysis && <p className="text-[10px] text-text-secondary mt-2">via {p.analysis.provider} · {p.analysis.model} — generated from collected facts only</p>}
+                        </Card>
+                    </div>
+                    <Card title="Top findings" icon={<ShieldIcon />}>
+                        <ul className="text-sm space-y-1">
+                            {missingHeaders.filter(f => f.severity === 'high').map(f => <li key={f.header}><Chip tone="red">high</Chip> Missing <code>{f.header}</code> — {f.note}</li>)}
+                            {r.dns.emailSecurity.findings.map(f => <li key={f}><Chip tone="yellow">email</Chip> {f}</li>)}
+                            {r.headers.disclosure.map(d => <li key={d.header}><Chip tone="blue">disclosure</Chip> <code>{d.header}: {d.value}</code></li>)}
+                            {r.tls.available && r.tls.authorized === false && <li><Chip tone="red">tls</Chip> Certificate not trusted: {r.tls.authorizationError}</li>}
+                            {r.forms.some(f => f.hasPassword && !f.action.startsWith('https:')) && <li><Chip tone="red">forms</Chip> Password form posts over non-HTTPS action.</li>}
+                            {!r.securityTxt.found && <li><Chip>info</Chip> No security.txt published (RFC 9116).</li>}
+                        </ul>
                     </Card>
                 </div>
+            )}
 
-                 <div className="lg:col-span-2">
-                    {hasAdvancedReconData(advancedRecon) ? (
-                        <Card title="Advanced Recon" icon={<AdvancedReconIcon />}>
-                            <AdvancedReconCard data={advancedRecon} />
+            {tab === 'Network' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 animate-fade-in">
+                    <Card title={`DNS Intel (${r.dns.resolver === 'doh' ? 'DNS-over-HTTPS' : 'system resolver'})`} icon={<GlobeIcon />}>
+                        <KV label="A" value={r.dns.a.join(', ')} />
+                        <KV label="AAAA" value={r.dns.aaaa.join(', ')} />
+                        <KV label="CNAME" value={r.dns.cname.join(', ')} />
+                        <KV label="NS" value={r.dns.ns.join(', ')} />
+                        <KV label="MX" value={r.dns.mx.map(m => `${m.priority} ${m.exchange}`).join(', ')} />
+                        <KV label="SOA" value={r.dns.soa ? `${r.dns.soa.nsname} · ${r.dns.soa.hostmaster} · serial ${r.dns.soa.serial}` : ''} />
+                        <KV label="CAA" value={r.dns.caa.join(' | ')} />
+                        <KV label="PTR" value={Object.entries(r.dns.reverse).map(([ip, n]) => `${ip} → ${n.join(', ') || '—'}`).join('; ')} />
+                        <details className="mt-1"><summary className="cursor-pointer text-hacker-green text-sm">TXT records ({r.dns.txt.length})</summary><CopyList items={r.dns.txt} /></details>
+                        {r.dns.errors.length > 0 && <p className="text-[10px] text-text-secondary mt-1">{r.dns.errors.join(' · ')}</p>}
+                    </Card>
+                    <div className="space-y-2">
+                        <Card title="Email Security (SPF / DMARC)" icon={<MailIcon />}>
+                            <KV label="SPF" value={r.dns.emailSecurity.spf} />
+                            <KV label="DMARC" value={r.dns.emailSecurity.dmarc} />
+                            <KV label="Policy" value={r.dns.emailSecurity.dmarcPolicy && <Chip tone={r.dns.emailSecurity.dmarcPolicy === 'reject' ? 'green' : r.dns.emailSecurity.dmarcPolicy === 'quarantine' ? 'blue' : 'yellow'}>{r.dns.emailSecurity.dmarcPolicy}</Chip>} />
+                            <ul className="text-xs text-yellow-300 mt-1 list-disc list-inside">{r.dns.emailSecurity.findings.map(f => <li key={f}>{f}</li>)}</ul>
                         </Card>
-                    ) : (
-                         <Card title="Advanced Recon" icon={<AdvancedReconIcon />}>
-                            <p className="text-text-secondary">No advanced reconnaissance data found.</p>
-                         </Card>
-                    )}
-                 </div>
+                        <Card title="SaaS Footprint (from DNS)" icon={<ChipIcon />}>
+                            {r.dns.saasFootprint.length ? <div className="flex flex-wrap gap-1">{r.dns.saasFootprint.map(s => <Chip key={s} tone="blue">{s}</Chip>)}</div> : <p className="text-sm text-text-secondary">No third-party verification tokens or SPF includes observed.</p>}
+                            <p className="text-[10px] text-text-secondary mt-1">Inferred from TXT domain-verification tokens and SPF includes.</p>
+                        </Card>
+                        <Card title="TLS Certificate" icon={<LockIcon />}>
+                            {r.tls.available ? (<>
+                                <KV label="Subject" value={r.tls.subject} />
+                                <KV label="Issuer" value={r.tls.issuer} />
+                                <KV label="Valid" value={`${r.tls.validFrom?.slice(0, 10)} → ${r.tls.validTo?.slice(0, 10)} (${r.tls.daysRemaining} days left)`} />
+                                <KV label="Protocol / cipher" value={`${r.tls.protocol} · ${r.tls.cipher}`} />
+                                <KV label="Trusted chain" value={r.tls.authorized ? <Chip tone="green">yes</Chip> : <Chip tone="red">{r.tls.authorizationError || 'no'}</Chip>} />
+                                <KV label="SHA-256" value={<span className="text-[10px]">{r.tls.fingerprint256}</span>} copy={r.tls.fingerprint256} />
+                                <details><summary className="cursor-pointer text-hacker-green text-sm">SANs ({r.tls.sans.length})</summary><CopyList items={r.tls.sans} /></details>
+                            </>) : <p className="text-sm text-hacker-red">TLS unavailable: {r.tls.error}</p>}
+                        </Card>
+                    </div>
+                </div>
+            )}
 
-                 <div className="lg:col-span-2">
-                    {hasOsintData(osint) ? (
-                        <Card title="OSINT Data Points" icon={<OSINTIcon />}>
-                            <OsintCard data={osint} />
-                        </Card>
-                     ) : (
-                         <Card title="OSINT Data Points" icon={<OSINTIcon />}>
-                            <p className="text-text-secondary">No OSINT data points discovered.</p>
-                         </Card>
-                     )}
-                 </div>
-                 
-                 {contentLanguage && (
+            {tab === 'Headers' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 animate-fade-in">
                     <div className="lg:col-span-2">
-                        <ContentLanguageCard data={contentLanguage} />
+                        <Card title="Security Header Audit" icon={<ShieldIcon />} headerActions={<Score value={r.headers.score} grade={r.headers.grade} label="grade" />}>
+                            <table className="w-full text-xs">
+                                <tbody>
+                                    {r.headers.findings.map(f => (
+                                        <tr key={f.header} className="border-b border-hacker-green/10 align-top">
+                                            <td className="py-1 pr-2 font-bold text-text-primary whitespace-nowrap">{f.header}</td>
+                                            <td className="py-1 pr-2">{f.present ? <Chip tone={f.severity === 'low' ? 'yellow' : 'green'}>{f.severity === 'low' ? 'weak' : 'present'}</Chip> : <Chip tone={sevTone(f.severity)}>missing · {f.severity}</Chip>}</td>
+                                            <td className="py-1 text-text-secondary">{f.note}{f.value && <div className="text-cyber-blue/80 break-all mt-0.5">{f.value.slice(0, 220)}</div>}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </Card>
                     </div>
-                 )}
-                 
-                 {accessibilityIssues && (
-                     <div className="lg:col-span-2">
-                        <AccessibilityCard issues={accessibilityIssues} score={accessibilityScore} />
+                    <div className="space-y-2">
+                        <Card title="Information Disclosure" icon={<RadarIcon />}>
+                            {r.headers.disclosure.length ? r.headers.disclosure.map(d => <KV key={d.header} label={d.header} value={d.value} />) : <p className="text-sm text-text-secondary">No version/stack-revealing headers.</p>}
+                        </Card>
+                        <Card title="Cookies" icon={<LockIcon />}>
+                            {r.headers.cookies.length ? r.headers.cookies.map(c => (
+                                <div key={c.name} className="text-xs flex flex-wrap gap-1 items-center py-0.5"><span className="text-text-primary font-bold mr-1">{c.name}</span>
+                                    <Chip tone={c.secure ? 'green' : 'red'}>Secure</Chip><Chip tone={c.httpOnly ? 'green' : 'yellow'}>HttpOnly</Chip><Chip tone={c.sameSite ? 'green' : 'yellow'}>SameSite={c.sameSite || 'unset'}</Chip></div>
+                            )) : <p className="text-sm text-text-secondary">No cookies set on first response.</p>}
+                        </Card>
+                        <Card title="Raw Response Headers" icon={<DocIcon />}>
+                            <pre className="text-[10px] text-text-secondary whitespace-pre-wrap break-all max-h-60 overflow-y-auto">{Object.entries(r.headers.raw).map(([k, v]) => `${k}: ${v}`).join('\n')}</pre>
+                        </Card>
                     </div>
-                 )}
-
-                <div className="lg:col-span-2">
-                    <Card title="Link Analysis" icon={<LinkIcon />}>
-                        <LinkAnalysisCard links={links} baseUrl={baseUrl} />
-                    </Card>
                 </div>
-                
-                <div className="lg:col-span-2">
-                    <Card title="Extracted Images" icon={<ImageIcon />} bodyClassName="!p-1">
-                        {images && images.length > 0 ? (
-                            <>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1">
-                                    {images.map((img, index) => {
-                                        const imageUrl = createAbsoluteUrl(img.src, baseUrl);
-                                        // Conditionally apply the proxy only for HTTP/S URLs.
-                                        const finalSrc = imageUrl.startsWith('http') ? proxyBuilder(imageUrl) : imageUrl;
-                                        
-                                        // Gracefully hide the image container on error.
-                                        const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                                            const container = e.currentTarget.parentElement;
-                                            if (container) {
-                                                container.style.display = 'none';
-                                            }
-                                        };
+            )}
 
-                                        return (
-                                            <div key={index} className="group relative aspect-square bg-hacker-dark">
-                                                <img 
-                                                    src={finalSrc} 
-                                                    alt={img.alt} 
-                                                    className="w-full h-full object-cover"
-                                                    onError={handleError}
-                                                />
-                                                <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-xs overflow-y-auto">
-                                                    <p className="text-text-primary font-bold break-words">{img.alt || 'No alt text'}</p>
-                                                    {img.detailedDescription && <p className="text-cyber-blue mt-1">{img.detailedDescription}</p>}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <button
-                                    onClick={onAnalyzeImages}
-                                    disabled={isAnalyzingImages}
-                                    className="w-full mt-1 flex items-center justify-center bg-hacker-green/10 hover:bg-cyber-blue/20 text-hacker-green hover:text-cyber-blue font-bold py-2 px-2 border border-hacker-green hover:border-cyber-blue transition-all duration-300 disabled:bg-hacker-dark-2 disabled:text-hacker-green/40 disabled:border-hacker-green/40 disabled:cursor-not-allowed text-xs"
-                                >
-                                    {isAnalyzingImages ? 'Analyzing...' : <><SparklesIcon /><span className="ml-2">Analyze Images with AI</span></>}
-                                </button>
-                            </>
-                        ) : <p className="text-text-secondary p-2">No images found.</p>}
+            {tab === 'Tech' && (
+                <Card title={`Technology Fingerprint (${r.tech.length})`} icon={<ChipIcon />}>
+                    {r.tech.length ? (
+                        <table className="w-full text-sm">
+                            <thead><tr className="text-left text-hacker-green text-xs uppercase"><th className="py-1">Technology</th><th>Category</th><th>Version</th><th>Evidence</th></tr></thead>
+                            <tbody>{r.tech.map(t => (
+                                <tr key={t.name} className="border-b border-hacker-green/10"><td className="py-1 text-text-primary font-bold">{t.name}</td><td><Chip tone="blue">{t.category}</Chip></td><td className="text-text-secondary">{t.version || '—'}</td><td className="text-[11px] text-text-secondary break-all">{t.evidence}</td></tr>
+                            ))}</tbody>
+                        </table>
+                    ) : <p className="text-text-secondary text-sm">No signatures matched. The site may be custom-built or render client-side.</p>}
+                    {r.meta.generator && <KV label="Meta generator" value={r.meta.generator} />}
+                    <p className="text-[10px] text-text-secondary mt-2">Deterministic signatures over HTML, script sources, headers and cookies — each hit shows its evidence.</p>
+                </Card>
+            )}
+
+            {tab === 'Contacts' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 animate-fade-in">
+                    <Card title={`Emails (${r.contacts.emails.length})`} icon={<MailIcon />}><CopyList items={r.contacts.emails} /></Card>
+                    <Card title={`Phones (${r.contacts.phones.length})`} icon={<UserIcon />}><CopyList items={r.contacts.phones} /></Card>
+                    <Card title={`Social Profiles (${r.contacts.socials.length})`} icon={<UserIcon />}>
+                        {r.contacts.socials.length ? <ul className="text-xs space-y-0.5 max-h-56 overflow-y-auto">{r.contacts.socials.map(s => (
+                            <li key={s.url} className="flex gap-2 items-center"><Chip tone="blue">{s.platform}</Chip><a className="truncate text-hacker-green hover:underline" href={s.url} target="_blank" rel="noopener noreferrer nofollow">{s.url}</a><CopyToClipboard textToCopy={s.url} /></li>
+                        ))}</ul> : <p className="text-sm text-text-secondary">None observed.</p>}
                     </Card>
+                    <Card title={`Addresses (${r.contacts.addresses.length})`} icon={<GlobeIcon />}><CopyList items={r.contacts.addresses} /></Card>
+                    <div className="md:col-span-2 text-[10px] text-text-secondary">Sources: mailto:/tel: links, visible text (incl. "[at]/[dot]" obfuscation), schema.org JSON-LD (sameAs, email, telephone, address) and &lt;address&gt; blocks. Deduplicated. Treat as personal data.</div>
                 </div>
+            )}
 
-                <div className="lg:col-span-4">
-                    <Card title="Deep Site Crawler" icon={<SiteCrawlerIcon />} headerActions={
-                         <button onClick={onCrawlSite} disabled={isCrawling} className="flex items-center text-xs bg-hacker-dark hover:bg-hacker-dark-2 text-hacker-green font-bold py-1 px-2 border border-hacker-green/50 transition-all duration-300 hover:text-cyber-blue hover:border-cyber-blue rounded-sm disabled:cursor-not-allowed disabled:opacity-50">
-                            {isCrawling ? 'Crawling...' : 'Start Crawl'}
-                        </button>
-                    }>
-                       {crawledPages.length > 0 ? (
-                            <div className="max-h-60 overflow-y-auto pr-2">
-                                {crawledPages.map(page => (
-                                    <div key={page.url} className="p-1 border-b border-hacker-green/20">
-                                        <a href={page.url} target="_blank" rel="noopener noreferrer" className="font-bold text-hacker-green hover:underline truncate block">{page.title}</a>
-                                        <p className="text-xs text-text-secondary truncate" title={page.url}>{page.url}</p>
-                                        <p className="text-sm text-text-primary mt-1">{page.summary}</p>
+            {tab === 'Surface' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 animate-fade-in">
+                    <Card title={`Certificate Transparency (${r.ct.subdomains.length})`} icon={<RadarIcon />}>
+                        {!r.ct.enabled ? <p className="text-sm text-text-secondary">Disabled for this scan.</p> : r.ct.error ? <p className="text-sm text-yellow-300">{r.ct.error}</p> : (<>
+                            <p className="text-xs text-text-secondary mb-1">{r.ct.certCount} unexpired certificates in public CT logs (crt.sh).</p>
+                            <CopyList items={r.ct.subdomains} max="max-h-72" />
+                        </>)}
+                    </Card>
+                    <div className="space-y-2">
+                        <Card title="Wayback Machine" icon={<DocIcon />}>
+                            {!r.wayback.enabled ? <p className="text-sm text-text-secondary">Disabled for this scan.</p> : (<>
+                                <KV label="First seen" value={r.wayback.firstSeen} />
+                                <KV label="Latest snapshot" value={r.wayback.closestUrl && <a className="text-hacker-green hover:underline" href={r.wayback.closestUrl} target="_blank" rel="noopener noreferrer">{r.wayback.closestTimestamp}</a>} />
+                                <KV label="Months with captures" value={r.wayback.snapshotCount} />
+                                {r.wayback.error && <p className="text-xs text-yellow-300">{r.wayback.error}</p>}
+                            </>)}
+                        </Card>
+                        <Card title="security.txt" icon={<ShieldIcon />}>
+                            {r.securityTxt.found ? (<><KV label="URL" value={r.securityTxt.url} /><KV label="Contact" value={r.securityTxt.contact.join(', ')} /><KV label="Policy" value={r.securityTxt.policy.join(', ')} /><KV label="Expires" value={r.securityTxt.expires} /></>) : <p className="text-sm text-text-secondary">Not published.</p>}
+                        </Card>
+                        <Card title={`robots.txt ${r.robots.found ? '' : '(not found)'}`} icon={<SpiderIcon />}>
+                            {r.robots.found && (<>
+                                {r.robots.crawlDelay !== undefined && <KV label="Crawl-delay" value={`${r.robots.crawlDelay}s`} />}
+                                <details open><summary className="cursor-pointer text-hacker-green text-sm">Disallowed paths ({r.robots.disallow.length})</summary><CopyList items={r.robots.disallow} max="max-h-40" /></details>
+                                <KV label="Declared sitemaps" value={r.robots.sitemaps.join(', ')} />
+                            </>)}
+                        </Card>
+                        <Card title={`Sitemap ${r.sitemap.found ? `(${r.sitemap.urlCount} URLs)` : '(not found)'}`} icon={<DocIcon />}>
+                            {r.sitemap.found && (<>
+                                <KV label="Source" value={r.sitemap.source} />
+                                {r.sitemap.nestedSitemaps.length > 0 && <details><summary className="cursor-pointer text-hacker-green text-sm">Child sitemaps ({r.sitemap.nestedSitemaps.length})</summary><CopyList items={r.sitemap.nestedSitemaps} link /></details>}
+                                {r.sitemap.sample.length > 0 && <details><summary className="cursor-pointer text-hacker-green text-sm">Sample URLs</summary><CopyList items={r.sitemap.sample} link /></details>}
+                            </>)}
+                        </Card>
+                    </div>
+                </div>
+            )}
+
+            {tab === 'Content' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 animate-fade-in">
+                    <Card title="SEO & Social Meta" icon={<DocIcon />}>
+                        <KV label="Title" value={r.meta.title} /><KV label="Description" value={r.meta.description} /><KV label="Lang" value={r.meta.lang} />
+                        <KV label="Canonical" value={r.meta.canonical} /><KV label="Robots meta" value={r.meta.robotsMeta} /><KV label="Words" value={r.meta.wordCount} />
+                        <KV label="H1" value={r.meta.headings.h1.join(' | ')} />
+                        <KV label="Keywords" value={r.meta.keywords.join(', ')} />
+                        <KV label="JSON-LD types" value={r.meta.jsonLdTypes.join(', ')} />
+                        {Object.keys(r.meta.og).length > 0 && <details><summary className="cursor-pointer text-hacker-green text-sm">Open Graph ({Object.keys(r.meta.og).length})</summary>{Object.entries(r.meta.og).map(([k, v]) => <KV key={k} label={`og:${k}`} value={v} />)}</details>}
+                        {Object.keys(r.meta.twitter).length > 0 && <details><summary className="cursor-pointer text-hacker-green text-sm">Twitter card ({Object.keys(r.meta.twitter).length})</summary>{Object.entries(r.meta.twitter).map(([k, v]) => <KV key={k} label={`twitter:${k}`} value={v} />)}</details>}
+                    </Card>
+                    <Card title="Accessibility Audit" icon={<UserIcon />} headerActions={<Score value={r.accessibility.score} label="a11y" />}>
+                        {r.accessibility.issues.length ? r.accessibility.issues.map(i => (
+                            <div key={i.description} className="flex items-center gap-2 text-sm py-0.5"><Chip tone={sevTone(i.impact)}>{i.impact}</Chip><span className="text-text-primary">{i.description}</span><span className="text-text-secondary">×{i.count}</span></div>
+                        )) : <p className="text-sm text-hacker-green">No heuristic issues detected.</p>}
+                        <p className="text-[10px] text-text-secondary mt-1">WCAG-inspired static heuristics on the served HTML — not a substitute for a full audit.</p>
+                    </Card>
+                    <Card title={`Links (${internal.length} internal · ${external.length} external)`} icon={<SpiderIcon />}>
+                        <details open><summary className="cursor-pointer text-hacker-green text-sm">Path roots ({r.subfolders.length})</summary><div className="flex flex-wrap gap-1 my-1">{r.subfolders.map(s => <Chip key={s}>{s}</Chip>)}</div></details>
+                        <details><summary className="cursor-pointer text-hacker-green text-sm">Internal</summary><CopyList items={internal.map(l => l.href)} link /></details>
+                        <details><summary className="cursor-pointer text-hacker-green text-sm">External</summary><CopyList items={external.map(l => l.href)} link /></details>
+                        {r.forms.length > 0 && <details><summary className="cursor-pointer text-hacker-green text-sm">Forms ({r.forms.length})</summary>{r.forms.map((f, i) => <p key={i} className="text-xs text-text-secondary">{f.method} {f.action} · {f.inputs} inputs{f.hasPassword ? ' · password' : ''}</p>)}</details>}
+                    </Card>
+                    <Card title={`Images (${r.images.length})`} icon={<DocIcon />} bodyClassName="!p-1" headerActions={
+                        <button className={btn} disabled={p.isAnalyzingImages || !p.provider?.configured || !p.provider?.vision} onClick={() => p.onAnalyzeImages(r.images.slice(0, 6).map(i => i.src))}
+                            title={p.provider && !p.provider.vision ? `${p.provider.label} model has no vision support` : 'Describe up to 6 images with the AI vision model'}>
+                            {p.isAnalyzingImages ? 'Analysing…' : p.provider && !p.provider.vision ? 'Vision n/a' : 'AI Vision'}
+                        </button>}>
+                        {r.images.length ? (
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1 max-h-96 overflow-y-auto">
+                                {r.images.slice(0, 40).map(img => (
+                                    <div key={img.src} className="group relative aspect-square bg-hacker-dark">
+                                        <img src={proxied(img.src)} alt={img.alt} loading="lazy" className="w-full h-full object-contain" onError={e => { (e.currentTarget.parentElement as HTMLElement).style.opacity = '0.3'; }} />
+                                        <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-[10px] overflow-y-auto">
+                                            <p className="text-text-primary font-bold break-words">{img.alt || <span className="text-hacker-red">no alt text</span>}</p>
+                                            {p.imageNotes[img.src]?.text && <p className="text-cyber-blue mt-1">{p.imageNotes[img.src].text}</p>}
+                                            {p.imageNotes[img.src]?.error && <p className="text-yellow-300 mt-1">{p.imageNotes[img.src].error}</p>}
+                                        </div>
+                                        {p.imageNotes[img.src]?.text && <span className="absolute top-0 right-0 bg-cyber-blue text-hacker-dark text-[9px] px-1">AI</span>}
                                     </div>
                                 ))}
                             </div>
-                       ) : <p className="text-text-secondary">No pages crawled yet. Click "Start Crawl" to analyze internal links.</p>}
+                        ) : <p className="text-sm text-text-secondary p-2">No images found.</p>}
                     </Card>
                 </div>
-            </div>
+            )}
+
+            {tab === 'Crawl' && (
+                <Card title="Polite Site Crawler" icon={<SpiderIcon />} headerActions={
+                    <div className="flex items-center gap-2">
+                        <select value={crawlSize} onChange={e => setCrawlSize(Number(e.target.value))} className="bg-hacker-dark text-hacker-green text-xs border border-hacker-green/40 p-1" disabled={p.isCrawling}>
+                            {[6, 12, 18, 25].map(n => <option key={n} value={n}>{n} pages</option>)}
+                        </select>
+                        <button className={btn} disabled={p.isCrawling} onClick={() => p.onCrawl(crawlSize)}>{p.isCrawling ? 'Crawling…' : 'Start crawl'}</button>
+                    </div>}>
+                    <p className="text-[11px] text-text-secondary mb-2">Same-host BFS (depth ≤ 2), honours robots.txt and Crawl-delay (min 750 ms between requests), capped at 25 pages.</p>
+                    {p.crawl ? (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                            <CrawlGraph crawl={p.crawl} />
+                            <div className="max-h-[420px] overflow-y-auto pr-1 space-y-1">
+                                {p.crawl.pages.map(pg => (
+                                    <div key={pg.url} className="border-b border-hacker-green/15 pb-1 text-xs">
+                                        <div className="flex gap-2 items-center"><Chip tone={pg.status && pg.status < 400 ? 'green' : 'red'}>{pg.status || 'ERR'}</Chip><Chip>d{pg.depth}</Chip>
+                                            <a href={pg.url} target="_blank" rel="noopener noreferrer" className="text-hacker-green hover:underline truncate font-bold">{pg.title}</a></div>
+                                        <p className="text-text-secondary truncate" title={pg.url}>{pg.url}</p>
+                                        {pg.description && <p className="text-text-primary">{pg.description.slice(0, 180)}</p>}
+                                        <p className="text-text-secondary">{pg.wordCount} words · {pg.outLinks} links{pg.emails.length ? ` · emails: ${pg.emails.join(', ')}` : ''}{pg.error ? ` · ${pg.error}` : ''}</p>
+                                    </div>
+                                ))}
+                                {p.crawl.skippedByRobots.length > 0 && <p className="text-xs text-yellow-300">Skipped by robots.txt: {p.crawl.skippedByRobots.length}</p>}
+                            </div>
+                        </div>
+                    ) : <p className="text-sm text-text-secondary">No crawl yet.</p>}
+                </Card>
+            )}
+
+            {tab === 'AI Intel' && (
+                <div className="space-y-2 animate-fade-in">
+                    {!p.analysis && (
+                        <Card title="AI Analysis" icon={<BrainIcon />}>
+                            {p.aiState.loading ? <p className="text-sm text-text-secondary">Running {p.provider?.label} ({p.provider?.model}) over verified facts… free-tier endpoints can take 10–120 s.</p>
+                                : <div className="text-sm text-text-secondary space-y-2"><p>{p.aiState.error || 'Not run yet.'}</p><button className={btn} onClick={p.onRunAI} disabled={!p.provider?.configured}>Run AI analysis</button></div>}
+                        </Card>
+                    )}
+                    {p.analysis && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                            <Card title="Executive Summary" icon={<BrainIcon />} headerActions={<button className={btn} onClick={p.onRunAI} disabled={p.aiState.loading}>{p.aiState.loading ? '…' : 'Re-run'}</button>}>
+                                <p className="text-sm text-text-primary">{p.analysis.summary}</p>
+                                <p className="text-[10px] text-text-secondary mt-2">via {p.analysis.provider} · {p.analysis.model}</p>
+                            </Card>
+                            <Card title="Linguistic Profile" icon={<DocIcon />}>
+                                <div className="flex gap-3 items-center">
+                                    <Score value={Math.round((p.analysis.sentiment + 1) * 50)} grade={p.analysis.sentiment.toFixed(2)} label="sentiment" />
+                                    <div><KV label="Language" value={p.analysis.language} /><KV label="Readability" value={p.analysis.readability} /></div>
+                                </div>
+                                <div className="flex flex-wrap gap-1 mt-2">{p.analysis.keyTopics.map(t => <Chip key={t} tone="blue">{t}</Chip>)}</div>
+                                <div className="flex flex-wrap gap-1 mt-1">{p.analysis.entities.map(t => <Chip key={t}>{t}</Chip>)}</div>
+                            </Card>
+                            <Card title="Security Narrative" icon={<ShieldIcon />}><p className="text-sm text-text-primary">{p.analysis.securityNarrative}</p></Card>
+                            <Card title="SEO & Accessibility Narrative" icon={<UserIcon />}><p className="text-sm text-text-primary">{p.analysis.seoNarrative}</p><p className="text-sm text-text-primary mt-2">{p.analysis.a11yNarrative}</p></Card>
+                            <div className="lg:col-span-2"><Card title="Prioritised Defensive Recommendations" icon={<ShieldIcon />}>
+                                <ol className="list-decimal list-inside text-sm text-text-primary space-y-1">{p.analysis.recommendations.map(x => <li key={x}>{x}</li>)}</ol>
+                            </Card></div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

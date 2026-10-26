@@ -1,420 +1,195 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { UrlInput } from './components/UrlInput';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { TerminalLog } from './components/TerminalLog';
 import { Disclaimer } from './components/Disclaimer';
 import { ChatInterface } from './components/ChatInterface';
-import { extractWebsiteContent, analyzeImagesInDetail, createChat, extractPageContent } from './geminiService';
-import type { ExtractionResult, ChatMessage, PageContent } from './types';
-import type { Chat } from '@google/genai';
-import { createAbsoluteUrl } from './utils';
+import { api } from './api';
+import type { ReconReport, AIAnalysis, CrawlResult, ChatMessage, ProvidersResponse, AIProviderId } from './types';
 
-const PROXIES: {
-    name: string;
-    builder: (url: string) => string;
-    fetcher?: (url: string) => Promise<string>;
-}[] = [
-    {
-        name: 'Ghostwire Direct Uplink (Server-Side Proxy)',
-        builder: (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`,
-        fetcher: async (url: string) => {
-            const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                throw new Error(data.error || `Direct proxy responded with status ${res.status}`);
-            }
-            return await res.text();
-        }
-    },
-    {
-        name: 'AllOrigins Gateway',
-        builder: (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-        fetcher: async (url: string) => {
-            try {
-                const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.contents) return data.contents;
-                }
-            } catch {
-                // Ignore and try raw
-            }
-            const rawRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-            if (!rawRes.ok) throw new Error(`AllOrigins raw status ${rawRes.status}`);
-            return await rawRes.text();
-        }
-    },
-    {
-        name: 'CorsProxy Gateway',
-        builder: (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-        fetcher: async (url: string) => {
-            const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`);
-            if (!res.ok) throw new Error(`CorsProxy status ${res.status}`);
-            return await res.text();
-        }
-    },
-    {
-        name: 'CodeTabs Gateway',
-        builder: (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        fetcher: async (url: string) => {
-            const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`);
-            if (!res.ok) throw new Error(`CodeTabs status ${res.status}`);
-            return await res.text();
-        }
-    }
-];
+const MODULES = ['SSRF guard + target normalisation', 'robots.txt policy', 'HTTP fetch + redirect chain', 'DNS intel (A/AAAA/MX/NS/TXT/SOA/CAA/PTR)', 'SPF / DMARC / SaaS footprint', 'TLS handshake + certificate', 'Security header audit', 'Technology fingerprint', 'Contact harvest (emails/phones/socials/JSON-LD)', 'Accessibility heuristics', 'Sitemap + security.txt', 'Certificate Transparency (crt.sh)', 'Wayback Machine CDX'];
+
+const ts = () => new Date().toLocaleTimeString('en-GB', { hour12: false });
 
 const App: React.FC = () => {
-    const [url, setUrl] = useState<string>('https://example.com');
-    const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
-    const [isLoading, setIsLoading] = useState<boolean>(false);
-    const [isAnalyzingImages, setIsAnalyzingImages] = useState<boolean>(false);
+    const [url, setUrl] = useState('https://example.com');
+    const [useCT, setUseCT] = useState(true);
+    const [useWayback, setUseWayback] = useState(true);
+    const [autoAI, setAutoAI] = useState(true);
+    const [report, setReport] = useState<ReconReport | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [lastFetchedHtml, setLastFetchedHtml] = useState<string>('');
-    const [logMessages, setLogMessages] = useState<string[]>([]);
-    const [successfulProxyBuilder, setSuccessfulProxyBuilder] = useState<((url: string) => string) | null>(null);
+    const [log, setLog] = useState<string[]>([]);
+    const [providers, setProviders] = useState<ProvidersResponse | null>(null);
+    const [providerId, setProviderId] = useState<AIProviderId | ''>('');
+    const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
+    const [aiState, setAiState] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
+    const [crawl, setCrawl] = useState<CrawlResult | null>(null);
+    const [isCrawling, setIsCrawling] = useState(false);
+    const [imageNotes, setImageNotes] = useState<Record<string, { text: string; error?: string }>>({});
+    const [isAnalyzingImages, setIsAnalyzingImages] = useState(false);
+    const [chat, setChat] = useState<ChatMessage[]>([]);
+    const [isChatLoading, setIsChatLoading] = useState(false);
 
-    const [chatSession, setChatSession] = useState<Chat | null>(null);
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-    const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
+    const push = (m: string) => setLog(prev => [...prev, `[${ts()}] ${m}`]);
 
-    const [crawledPages, setCrawledPages] = useState<PageContent[]>([]);
-    const [isCrawling, setIsCrawling] = useState<boolean>(false);
-
-
-    const handleExtract = useCallback(async () => {
-        let initialUrl = url.trim();
-        if (!initialUrl) {
-            setError('Error: URL parameter missing.');
-            return;
-        }
-
-        // Normalize URL to ensure it has a protocol, which is required for it to be a valid base URL.
-        let validUrl = initialUrl;
-        if (!/^(https?|ftp):\/\//i.test(validUrl)) {
-            validUrl = `https://${validUrl}`;
-        }
-        
-        // If the URL was changed, update the state.
-        // This ensures subsequent renders and callbacks (like handleCrawlSite) use the correct, valid URL.
-        if (validUrl !== url) {
-            setUrl(validUrl);
-        }
-
-        setIsLoading(true);
-        setError(null);
-        setExtractionResult(null);
-        setLastFetchedHtml('');
-        setSuccessfulProxyBuilder(null);
-        setChatSession(null);
-        setChatMessages([]);
-        setCrawledPages([]);
-        setIsCrawling(false);
-        setLogMessages([
-            '> Initializing Ghostwire Mk.III Protocol...',
-            '> Establishing secure proxy link...',
-        ]);
-
-        let htmlContent = '';
-        let successfulFetch = false;
-        let lastError: Error | null = null;
-        let usedProxyBuilder: ((url: string) => string) | null = null;
-        let successfulProxyName = '';
-
-        for (const proxy of PROXIES) {
-            setLogMessages(prev => [...prev, `> Attempting connection via ${proxy.name}...`]);
-            try {
-                let content = '';
-                if (proxy.fetcher) {
-                    content = await proxy.fetcher(validUrl);
-                } else {
-                    const proxyUrl = proxy.builder(validUrl);
-                    const response = await fetch(proxyUrl);
-                    if (!response.ok) {
-                        throw new Error(`Proxy service responded with status: ${response.status}.`);
-                    }
-                    content = await response.text();
-                }
-
-                if (!content || content.trim().length === 0) {
-                    throw new Error('Data stream empty. Proxy returned no content.');
-                }
-
-                htmlContent = content;
-                usedProxyBuilder = proxy.builder;
-                successfulProxyName = proxy.name;
-                setSuccessfulProxyBuilder(() => proxy.builder);
-                successfulFetch = true;
-                setLogMessages(prev => [...prev, `> Secure link established via ${proxy.name}. Loaded ${htmlContent.length} bytes.`]);
-                break;
-            } catch (err) {
-                lastError = err as Error;
-                const errDetail = err instanceof Error ? err.message : 'Unknown connection error';
-                setLogMessages(prev => [...prev, `> Connection via ${proxy.name} failed (${errDetail}). Retrying fallback...`]);
-            }
-        }
-        
-        if (!successfulFetch) {
-            const baseMessage = `All proxy connections failed. Last error: ${lastError?.message || 'Unknown connection error.'}`;
-            const detailedError = `${baseMessage}\n\nThis can happen due to network issues, browser security (CORS), or because the free, public proxy services used by this tool are temporarily offline. Please try again later or with a different URL.`;
-            setError(`// ERROR: ${detailedError}`);
-            setLogMessages(prev => [...prev, `> PROTOCOL FAILED. ${baseMessage}`]);
-            setIsLoading(false);
-            return;
-        }
-
-        if (successfulProxyName.includes('JS Enabled')) {
-            setLogMessages(prev => [...prev, `> JS rendering successful. Analyzing fully-rendered DOM.`]);
-        }
-
-        try {
-            setLogMessages(prev => [...prev, '> Transmitting target HTML...']);
-            setLastFetchedHtml(htmlContent);
-            
-            setLogMessages(prev => [
-                ...prev, 
-                '> Engaging Ghostwire AI for deep analysis...', 
-                '> Executing Threat Intel Scan...',
-                '> Performing A11y & Linguistic Audit...',
-                '> Data stream is live, parsing intelligence...',
-            ]);
-            const result = await extractWebsiteContent(validUrl, htmlContent);
-            setExtractionResult(result);
-            setLogMessages(prev => [...prev, '> RECONNAISSANCE COMPLETE. Data displayed below.', '> Intelligence Debriefing module online.', '> Site Crawler module online.']);
-            
-            try {
-                const chat = createChat(result);
-                setChatSession(chat);
-            } catch (chatErr) {
-                 console.error("Failed to initialize chat session:", chatErr);
-                 setError(prev => `${prev ?? ''}\n// WARNING: Intelligence Debriefing module failed to initialize.`);
-            }
-
-        } catch (err) {
-            console.error("Extraction protocol failed:", err);
-            const detailedError = err instanceof Error ? err.message : "An unknown anomaly was detected during the extraction protocol.";
-            setError(`// ERROR: ${detailedError}`);
-            setLogMessages(prev => [...prev, `> PROTOCOL FAILED. ${detailedError}`]);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [url]);
-
-    const handleCrawlSite = useCallback(async () => {
-        if (!extractionResult || !successfulProxyBuilder) return;
-    
-        setIsCrawling(true);
-        setLogMessages(prev => [
-            ...prev,
-            '> Initializing Deep Site Crawler...',
-            '> Compiling internal link manifest...'
-        ]);
-    
-        const internalLinks = extractionResult.links.filter(link => link.type === 'internal' && link.href && !link.href.startsWith('#'));
-        const uniqueUrls = [...new Set(internalLinks.map(link => createAbsoluteUrl(link.href, url)).filter(Boolean))];
-        
-        setLogMessages(prev => [...prev, `> Found ${uniqueUrls.length} unique internal pages to analyze.`]);
-    
-        for (const pageUrl of uniqueUrls) {
-            if (pageUrl === url) continue; // Skip re-crawling the initial page
-            
-            setLogMessages(prev => [...prev, `> Crawling: ${pageUrl}`]);
-            try {
-                let html = '';
-                const directRes = await fetch(`/api/proxy?url=${encodeURIComponent(pageUrl)}`);
-                if (directRes.ok) {
-                    html = await directRes.text();
-                } else {
-                    const proxyUrl = successfulProxyBuilder(pageUrl);
-                    const response = await fetch(proxyUrl);
-                    if (!response.ok) {
-                        throw new Error(`Proxy fetch failed with status ${response.status}`);
-                    }
-                    html = await response.text();
-                }
-
-                if (!html) {
-                    throw new Error('No content received from page.');
-                }
-                
-                const pageData = await extractPageContent(html);
-                setCrawledPages(prevPages => [...prevPages, { ...pageData, url: pageUrl }]);
-
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-                setLogMessages(prev => [...prev, `> CRAWL ERROR on ${pageUrl}: ${errorMessage}`]);
-            }
-        }
-    
-        setLogMessages(prev => [...prev, '> Deep Crawl complete.']);
-        setIsCrawling(false);
-    }, [extractionResult, successfulProxyBuilder, url]);
-
-    const handleAnalyzeImages = useCallback(async () => {
-        if (!extractionResult?.images || !lastFetchedHtml) {
-            setError("Image analysis failed: Initial data packets not found.");
-            return;
-        }
-        
-        setIsAnalyzingImages(true);
-        setError(null);
-        try {
-            const analyzedImages = await analyzeImagesInDetail(extractionResult.images, url, lastFetchedHtml);
-            
-            setExtractionResult(prevResult => {
-                if (!prevResult) return null;
-                const analyzedImagesMap = new Map(analyzedImages.map(img => [img.src, img]));
-                const updatedImages = prevResult.images.map(oldImg => {
-                    const newImgData = analyzedImagesMap.get(oldImg.src);
-                    return newImgData ? { ...oldImg, detailedDescription: newImgData.detailedDescription } : oldImg;
-                });
-                return { ...prevResult, images: updatedImages };
-            });
-        } catch (err) {
-            console.error("Image analysis protocol failed:", err);
-            setError(err instanceof Error ? `// ERROR: ${err.message}` : "// ERROR: Unknown anomaly in image analysis protocol.");
-        } finally {
-            setIsAnalyzingImages(false);
-        }
-    }, [extractionResult, lastFetchedHtml, url]);
-
-    const handleDownloadReport = useCallback(() => {
-        if (!extractionResult) return;
-        try {
-            const fullReport = {
-                ...extractionResult,
-                crawledPages: crawledPages,
-            };
-            const jsonString = JSON.stringify(fullReport, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const href = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = href;
-            const domain = new URL(url).hostname;
-            link.download = `recon-report-${domain}-${new Date().toISOString().slice(0,10)}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(href);
-        } catch(e) {
-            console.error("Failed to generate report", e);
-            setError("// ERROR: Failed to generate JSON report.");
-        }
-    }, [extractionResult, url, crawledPages]);
-
-    const handleSendMessage = async (message: string) => {
-        if (!chatSession || isChatLoading) return;
-    
-        setIsChatLoading(true);
-        
-        const userMessage: ChatMessage = { role: 'user', content: message };
-        const modelPlaceholder: ChatMessage = { role: 'model', content: '' };
-        
-        setChatMessages(prev => [...prev, userMessage, modelPlaceholder]);
-    
-        try {
-            const stream = await chatSession.sendMessageStream({ message });
-            
-            let accumulatedText = '';
-            for await (const chunk of stream) {
-                const chunkText = chunk.text;
-                if (chunkText) {
-                    accumulatedText += chunkText;
-                    setChatMessages(prev => {
-                        const newMessages = [...prev];
-                        newMessages[newMessages.length - 1] = { role: 'model', content: accumulatedText };
-                        return newMessages;
-                    });
-                }
-            }
-
-        } catch (err) {
-            console.error("Chat send message failed:", err);
-            const errorMessage = err instanceof Error ? err.message : "Unknown error";
-            setChatMessages(prev => {
-                const newMessages = [...prev];
-                const lastMsg = newMessages[newMessages.length - 1];
-                lastMsg.content = `// ERROR: DEBRIEFING MODULE OFFLINE. REASON: ${errorMessage}`;
-                return newMessages;
-            });
-        } finally {
-            setIsChatLoading(false);
-        }
-    };
-    
-    const handleNewScan = useCallback(() => {
-        setExtractionResult(null);
-        setError(null);
-        setLastFetchedHtml('');
-        setLogMessages([]);
-        setSuccessfulProxyBuilder(null);
-        setChatSession(null);
-        setChatMessages([]);
-        setCrawledPages([]);
-        setIsCrawling(false);
+    useEffect(() => {
+        api.providers().then(p => { setProviders(p); setProviderId(p.default || ''); }).catch(() => setProviders({ default: null, providers: [] }));
     }, []);
 
+    const provider = providers?.providers.find(p => p.id === providerId) || null;
+
+    const runAI = useCallback(async (rep: ReconReport, pid = providerId) => {
+        if (!pid) { setAiState({ loading: false, error: 'No AI provider configured on the server (set NVIDIA_API_KEY or GEMINI_API_KEY). Deterministic OSINT is unaffected.' }); return; }
+        setAiState({ loading: true, error: null });
+        push(`> AI layer: ${pid} analysing verified facts…`);
+        try {
+            const a = await api.analyze(rep, pid);
+            setAnalysis(a);
+            setAiState({ loading: false, error: null });
+            push(`> AI analysis OK (${a.model}).`);
+        } catch (e: any) {
+            setAiState({ loading: false, error: `AI analysis failed: ${e.message}` });
+            push(`> AI ERROR: ${e.message}`);
+        }
+    }, [providerId]);
+
+    const handleExtract = useCallback(async () => {
+        const target = url.trim();
+        if (!target) { setError('Enter a target URL or domain.'); return; }
+        setIsLoading(true); setError(null); setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setImageNotes({});
+        setAiState({ loading: false, error: null });
+        setLog([`[${ts()}] > GhostWires Mk.IV — passive OSINT pipeline engaged against ${target}`]);
+        let i = 0;
+        const ticker = setInterval(() => { if (i < MODULES.length) push(`> module: ${MODULES[i++]}`); }, 450);
+        try {
+            const rep = await api.recon(target, useCT, useWayback);
+            clearInterval(ticker);
+            setReport(rep);
+            setUrl(rep.target.finalUrl);
+            push(`> RECON COMPLETE in ${(rep.durationMs / 1000).toFixed(1)}s — ${rep.tech.length} tech, ${rep.contacts.emails.length} emails, ${rep.ct.subdomains.length} CT subdomains, headers ${rep.headers.grade}.`);
+            if (autoAI && providerId) runAI(rep);
+        } catch (e: any) {
+            clearInterval(ticker);
+            setError(`// ERROR: ${e.message}`);
+            push(`> PROTOCOL FAILED: ${e.message}`);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [url, useCT, useWayback, autoAI, providerId, runAI]);
+
+    const handleCrawl = useCallback(async (maxPages: number) => {
+        if (!report) return;
+        setIsCrawling(true);
+        push(`> Polite crawler started (≤${maxPages} pages, robots.txt honoured)…`);
+        try {
+            const c = await api.crawl(report.target.finalUrl, maxPages);
+            setCrawl(c);
+            push(`> Crawl COMPLETE: ${c.pages.length} pages, ${c.skippedByRobots.length} skipped by robots.txt.`);
+        } catch (e: any) {
+            push(`> CRAWL ERROR: ${e.message}`);
+            setError(`// CRAWL ERROR: ${e.message}`);
+        } finally { setIsCrawling(false); }
+    }, [report]);
+
+    const handleImages = useCallback(async (srcs: string[]) => {
+        if (!report) return;
+        setIsAnalyzingImages(true);
+        try {
+            const res = await api.vision(srcs, report.target.finalUrl, providerId || undefined);
+            setImageNotes(prev => ({ ...prev, ...Object.fromEntries(res.results.map(r => [r.src, { text: r.detailedDescription, error: r.error }])) }));
+            push(`> Vision: ${res.results.filter(r => r.detailedDescription).length}/${res.results.length} images described.`);
+        } catch (e: any) {
+            setError(`// VISION ERROR: ${e.message}`);
+        } finally { setIsAnalyzingImages(false); }
+    }, [report, providerId]);
+
+    const handleSend = async (message: string) => {
+        if (!report || isChatLoading) return;
+        const history: ChatMessage[] = [...chat, { role: 'user', content: message }];
+        setChat([...history, { role: 'model', content: '' }]);
+        setIsChatLoading(true);
+        let acc = '';
+        try {
+            await api.chat(report, history, providerId || undefined, d => {
+                acc += d;
+                setChat(prev => { const n = [...prev]; n[n.length - 1] = { role: 'model', content: acc }; return n; });
+            });
+        } catch (e: any) {
+            setChat(prev => { const n = [...prev]; n[n.length - 1] = { role: 'model', content: `// ERROR: DEBRIEF OFFLINE — ${e.message}` }; return n; });
+        } finally { setIsChatLoading(false); }
+    };
+
+    const handleDownload = () => {
+        if (!report) return;
+        const blob = new Blob([JSON.stringify({ report, analysis, crawl, imageNotes }, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `ghostwires-mk4-${report.target.hostname}-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+
+    const handleNewScan = () => { setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setLog([]); setError(null); setImageNotes({}); };
+
+    const toggle = 'flex items-center gap-1 cursor-pointer select-none';
     return (
         <div className="min-h-screen bg-transparent text-hacker-green font-mono flex flex-col">
-            <main className="container mx-auto px-4 pt-12 pb-6 flex-grow">
+            <main className="container mx-auto px-4 pt-10 pb-6 flex-grow">
                 <header className="text-center mb-4">
                     <h1 className="inline-block text-3xl md:text-4xl font-bold text-hacker-green text-shadow-glow-green">
-                        &gt; Ghostwire Mk.III<span className="blinking-cursor h-8 md:h-9 align-bottom"></span>
+                        &gt; GhostWires Mk.IV<span className="blinking-cursor h-8 md:h-9 align-bottom"></span>
                     </h1>
+                    <p className="text-xs text-text-secondary mt-1">Passive OSINT reconnaissance · real DNS / TLS / headers / CT / Wayback · AI-grounded debrief</p>
                 </header>
-                
+
                 <div className="max-w-4xl mx-auto">
-                    <UrlInput
-                        url={url}
-                        setUrl={setUrl}
-                        onExtract={handleExtract}
-                        isLoading={isLoading || isCrawling}
-                    />
-                    
+                    <UrlInput url={url} setUrl={setUrl} onExtract={handleExtract} isLoading={isLoading || isCrawling} />
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary mt-2 px-1">
+                        <label className={toggle}><input type="checkbox" checked={useCT} onChange={e => setUseCT(e.target.checked)} className="accent-[#00ff41]" /> CT logs (crt.sh)</label>
+                        <label className={toggle}><input type="checkbox" checked={useWayback} onChange={e => setUseWayback(e.target.checked)} className="accent-[#00ff41]" /> Wayback</label>
+                        <label className={toggle}><input type="checkbox" checked={autoAI} onChange={e => setAutoAI(e.target.checked)} className="accent-[#00ff41]" /> Auto AI analysis</label>
+                        <span className="ml-auto flex items-center gap-1">
+                            AI provider:
+                            <select value={providerId} onChange={e => { setProviderId(e.target.value as AIProviderId); setAnalysis(null); }} className="bg-hacker-dark text-hacker-green border border-hacker-green/40 p-0.5">
+                                {!providers?.providers.some(p => p.configured) && <option value="">none configured</option>}
+                                {providers?.providers.map(p => (
+                                    <option key={p.id} value={p.id} disabled={!p.configured}>{p.label}{p.configured ? '' : ' (no key)'}{p.vision ? ' · vision' : ''}</option>
+                                ))}
+                            </select>
+                            {provider && <span className={`w-2 h-2 rounded-full ${provider.configured ? 'bg-hacker-green' : 'bg-hacker-red'}`} title={`${provider.label} · ${provider.model}`} />}
+                        </span>
+                    </div>
+                    {provider && <p className="text-[10px] text-text-secondary text-right px-1">model: {provider.model}{!provider.vision && ' · image analysis unavailable for this provider'}</p>}
+
                     {error && (
-                        <div className="mt-4 border border-hacker-red/50 bg-hacker-red/10 text-hacker-red px-4 py-3 text-left whitespace-pre-wrap" role="alert">
-                            <p className="font-bold">SYSTEM ALERT</p>
-                            <p className="text-sm">{error}</p>
+                        <div className="mt-3 border border-hacker-red/50 bg-hacker-red/10 text-hacker-red px-4 py-3 whitespace-pre-wrap" role="alert">
+                            <p className="font-bold">SYSTEM ALERT</p><p className="text-sm">{error}</p>
                         </div>
                     )}
                 </div>
 
-                <div className="mt-6 max-w-6xl mx-auto">
-                    {(isLoading || (isCrawling && !extractionResult)) && <TerminalLog messages={logMessages} />}
-                    {extractionResult && successfulProxyBuilder && (
+                <div className="mt-5 max-w-6xl mx-auto space-y-4">
+                    {log.length > 0 && <TerminalLog messages={log} active={isLoading || isCrawling || aiState.loading} />}
+                    {report && (
                         <div className="animate-fade-in space-y-4">
-                            { (isCrawling || logMessages.length > 0) && !isLoading && <TerminalLog messages={logMessages} />}
                             <ResultsDisplay
-                                result={extractionResult}
-                                baseUrl={url}
-                                onAnalyzeImages={handleAnalyzeImages}
-                                isAnalyzingImages={isAnalyzingImages}
-                                onDownloadReport={handleDownloadReport}
-                                onNewScan={handleNewScan}
-                                proxyBuilder={successfulProxyBuilder}
-                                onCrawlSite={handleCrawlSite}
-                                isCrawling={isCrawling}
-                                crawledPages={crawledPages}
-                             />
-                            {chatSession && (
-                                <ChatInterface
-                                    messages={chatMessages}
-                                    onSendMessage={handleSendMessage}
-                                    isLoading={isChatLoading}
-                                    result={extractionResult}
-                                />
-                             )}
+                                report={report} analysis={analysis} aiState={aiState} onRunAI={() => runAI(report)} provider={provider}
+                                crawl={crawl} isCrawling={isCrawling} onCrawl={handleCrawl}
+                                imageNotes={imageNotes} isAnalyzingImages={isAnalyzingImages} onAnalyzeImages={handleImages}
+                                onDownloadReport={handleDownload} onNewScan={handleNewScan}
+                            />
+                            <ChatInterface messages={chat} onSendMessage={handleSend} isLoading={isChatLoading} result={report}
+                                providerLabel={provider ? `${provider.label} · ${provider.model}` : undefined}
+                                disabledReason={provider?.configured ? null : 'Configure an AI provider on the server to enable debriefing.'} />
                         </div>
                     )}
-                </div>
-
-                <div className="mt-6 max-w-6xl mx-auto">
                     <Disclaimer />
                 </div>
             </main>
-            <footer className="w-full text-center py-3 border-t border-hacker-green/30 bg-hacker-dark">
-                <p className="text-sm text-text-secondary">Ghostwire Mk.III // Reconnaissance Protocol</p>
+            <footer className="w-full text-center py-3 border-t border-hacker-green/30 bg-hacker-dark text-xs text-text-secondary">
+                <p>GhostWires Mk.IV // Passive OSINT Reconnaissance Protocol — authorised targets only</p>
+                <p className="mt-0.5">Built by Yasin Mohammed Miah, Student of BCU, BSc Computing Top-Up (Hons)</p>
             </footer>
         </div>
     );
