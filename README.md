@@ -16,6 +16,26 @@ GhostWires Mk.IV runs a deterministic, server-side OSINT pipeline against a publ
 
 ---
 
+<div align="center">
+
+### 🧰 Tech Stack
+
+**Frontend**<br/>
+![React 18](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB) ![TypeScript 5.8](https://img.shields.io/badge/TypeScript_5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white) ![Vite 6](https://img.shields.io/badge/Vite_6-646CFF?style=for-the-badge&logo=vite&logoColor=white) ![Tailwind CSS 3](https://img.shields.io/badge/Tailwind_CSS_3-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+
+**Backend & OSINT engine**<br/>
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white) ![Express 5](https://img.shields.io/badge/Express_5-000000?style=for-the-badge&logo=express&logoColor=white) ![Cheerio](https://img.shields.io/badge/Cheerio-E88C1F?style=for-the-badge&logo=cheerio&logoColor=white) ![DNS over HTTPS](https://img.shields.io/badge/DNS_over_HTTPS-F38020?style=for-the-badge&logo=cloudflare&logoColor=white) ![crt.sh CT logs](https://img.shields.io/badge/crt.sh_CT_logs-4B32C3?style=for-the-badge&logo=letsencrypt&logoColor=white) ![Wayback Machine](https://img.shields.io/badge/Wayback_Machine-555555?style=for-the-badge&logo=internetarchive&logoColor=white)
+
+**AI providers (bring your own key)**<br/>
+![NVIDIA NIM](https://img.shields.io/badge/NVIDIA_NIM-76B900?style=for-the-badge&logo=nvidia&logoColor=white) ![Google Gemini](https://img.shields.io/badge/Google_Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white) ![OpenRouter](https://img.shields.io/badge/OpenRouter-6566F1?style=for-the-badge&logo=openrouter&logoColor=white) ![Groq](https://img.shields.io/badge/Groq-F55036?style=for-the-badge&logo=groq&logoColor=white)
+
+**DevOps & hosting**<br/>
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white) ![GHCR](https://img.shields.io/badge/GHCR-181717?style=for-the-badge&logo=github&logoColor=white) ![Render](https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=black)
+
+</div>
+
+---
+
 ## ⚠️ Rules of engagement
 
 - **Authorised targets only.** Scan only sites you own or have written permission to assess. You are responsible for complying with the Computer Misuse Act 1990, UK GDPR / GDPR and the target's terms of service.
