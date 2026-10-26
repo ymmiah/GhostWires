@@ -4,6 +4,10 @@
 [![Docker image](https://github.com/ymmiah/GhostWires/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ymmiah/GhostWires/pkgs/container/ghostwires)
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ymmiah/GhostWires)
 
+### 🌐 Live demo: **[ghostwires.onrender.com](https://ghostwires.onrender.com/)**
+
+> Free Render instance — first load after idle can take ~30–60 s to wake up. Bring your own AI key (wiped when you close the tab).
+
 **Passive OSINT reconnaissance for websites — real data, not hallucinations. Bring your own AI key; it's wiped when you close the tab.**
 
 GhostWires Mk.IV runs a deterministic, server-side OSINT pipeline against a public website (DNS, TLS, HTTP headers, technology fingerprint, public contacts, robots/sitemap/security.txt, Certificate Transparency and the Wayback Machine) and then hands those **verified facts** to an AI model of your choice — **NVIDIA NIM (free)**, Google Gemini, OpenRouter or Groq — for narrative analysis, image description and a grounded debrief chat.
