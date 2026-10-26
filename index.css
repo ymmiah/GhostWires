@@ -40,3 +40,17 @@
       margin-left: 8px;
     }
   
+/* MS Word-style caret: thin vertical bar, ~530 ms blink, solid while typing */
+.word-caret {
+  display: inline-block;
+  width: 3px;
+  height: 1.05em;
+  margin-left: 4px;
+  vertical-align: -0.12em;
+  background-color: #00ff41;
+  box-shadow: 0 0 6px #00ff41;
+  animation: word-caret-blink 1.06s steps(1, end) infinite;
+}
+.word-caret--solid { animation: none; opacity: 1; }
+@keyframes word-caret-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .word-caret { animation: none; } }

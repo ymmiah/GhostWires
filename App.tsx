@@ -6,6 +6,7 @@ import { Disclaimer } from './components/Disclaimer';
 import { ChatInterface } from './components/ChatInterface';
 import { api } from './api';
 import { KeyModal } from './components/KeyModal';
+import { TypingTitle } from './components/TypingTitle';
 import { loadKey, wipeKey, subscribe, installWipeOnClose, maskKey, type StoredKey } from './keyVault';
 import type { ReconReport, AIAnalysis, CrawlResult, ChatMessage, ProvidersResponse, AIProviderId } from './types';
 
@@ -163,7 +164,7 @@ const App: React.FC = () => {
             <main className="container mx-auto px-4 pt-10 pb-6 flex-grow">
                 <header className="text-center mb-4">
                     <h1 className="inline-block text-3xl md:text-4xl font-bold text-hacker-green text-shadow-glow-green">
-                        &gt; GhostWires Mk.IV<span className="blinking-cursor h-8 md:h-9 align-bottom"></span>
+                        <TypingTitle text="> GhostWires Mk.IV" />
                     </h1>
                     <p className="text-xs text-text-secondary mt-1">Passive OSINT reconnaissance · real DNS / TLS / headers / CT / Wayback · AI-grounded debrief</p>
                 </header>
