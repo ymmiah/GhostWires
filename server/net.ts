@@ -6,19 +6,26 @@ import type { RedirectHop } from '../types';
 export const USER_AGENT =
     'Mozilla/5.0 (compatible; GhostWires-MkIV/4.0; +https://github.com/ymmiah/GhostWires; authorized-OSINT)';
 
-const blockList = new net.BlockList();
+// IMPORTANT: keep IPv4 and IPv6 in SEPARATE BlockLists.
+// Node's net.BlockList mixes families poorly — adding ::ffff:0:0/96 to a shared
+// list makes check("148.x.x.x", "ipv4") return true for every public IPv4.
+const v4Block = new net.BlockList();
+const v6Block = new net.BlockList();
+
 // IPv4 private / reserved / special-purpose ranges
 [
     ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
     ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24],
     ['192.88.99.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24],
     ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4],
-].forEach(([a, p]) => blockList.addSubnet(a as string, p as number, 'ipv4'));
-// IPv6 loopback / unspecified / ULA / link-local / multicast / mapped / docs
+].forEach(([a, p]) => v4Block.addSubnet(a as string, p as number, 'ipv4'));
+
+// IPv6 loopback / unspecified / ULA / link-local / multicast / docs / discard
+// Do NOT add ::ffff:0:0/96 here — that is the entire IPv4 space; handle mapped below.
 [
     ['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
-    ['::ffff:0:0', 96], ['64:ff9b::', 96], ['2001:db8::', 32], ['100::', 64],
-].forEach(([a, p]) => blockList.addSubnet(a as string, p as number, 'ipv6'));
+    ['2001:db8::', 32], ['100::', 64],
+].forEach(([a, p]) => v6Block.addSubnet(a as string, p as number, 'ipv6'));
 
 // Some VPN/TUN proxies (e.g. Clash "fake-ip" mode) answer DNS with 198.18.0.0/15.
 // Opt-in only: GHOSTWIRES_ALLOW_FAKEIP=1 lets those through. Never enable on shared servers.
@@ -26,16 +33,47 @@ const allowFakeIP = () => process.env.GHOSTWIRES_ALLOW_FAKEIP === '1';
 const fakeIPRange = new net.BlockList();
 fakeIPRange.addSubnet('198.18.0.0', 15, 'ipv4');
 
+/** Turn two hextets into dotted IPv4. */
+function hextetsToIPv4(hiHex: string, loHex: string): string {
+    const hi = parseInt(hiHex, 16);
+    const lo = parseInt(loHex, 16);
+    return `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
+}
+
+/** Extract embedded IPv4 from IPv4-mapped (::ffff:…) or NAT64 64:ff9b::/96. */
+function embeddedIPv4(ip: string): string | null {
+    const lower = ip.toLowerCase();
+    const dotted = lower.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+    if (dotted) return dotted[1];
+    const hexMapped = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hexMapped) return hextetsToIPv4(hexMapped[1], hexMapped[2]);
+    // NAT64 well-known prefix — last 32 bits are the IPv4 address
+    const nat64 = lower.match(/^64:ff9b:(?:0:){0,4}([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (nat64) return hextetsToIPv4(nat64[1], nat64[2]);
+    if (lower === '64:ff9b::' || lower.startsWith('64:ff9b::')) {
+        // 64:ff9b::a.b.c.d dotted form
+        const natDotted = lower.match(/^64:ff9b::(\d{1,3}(?:\.\d{1,3}){3})$/);
+        if (natDotted) return natDotted[1];
+    }
+    return null;
+}
+
 export function isBlockedIP(ip: string): boolean {
-    if (allowFakeIP() && net.isIP(ip) === 4 && fakeIPRange.check(ip, 'ipv4')) return false;
     const family = net.isIP(ip);
-    if (family === 4) return blockList.check(ip, 'ipv4');
+    if (family === 4) {
+        if (allowFakeIP() && fakeIPRange.check(ip, 'ipv4')) return false;
+        return v4Block.check(ip, 'ipv4');
+    }
     if (family === 6) {
+        const embedded = embeddedIPv4(ip);
+        if (embedded) {
+            if (allowFakeIP() && fakeIPRange.check(embedded, 'ipv4')) return false;
+            return v4Block.check(embedded, 'ipv4');
+        }
+        // Unparsed NAT64 → block (avoid treating the whole prefix as public)
         const lower = ip.toLowerCase();
-        // IPv4-mapped IPv6 → check embedded v4
-        const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-        if (mapped) return blockList.check(mapped[1], 'ipv4');
-        return blockList.check(lower, 'ipv6');
+        if (lower === '64:ff9b::' || lower.startsWith('64:ff9b:')) return true;
+        return v6Block.check(lower, 'ipv6');
     }
     return true;
 }
