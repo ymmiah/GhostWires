@@ -8,3 +8,6 @@ dist-server
 !.env.example
 *.log
 .DS_Store
+**/*.sqlite
+**/*.sqlite-wal
+**/*.sqlite-shm

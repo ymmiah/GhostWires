@@ -13,7 +13,7 @@ import { validateInventory } from './assessment/advisories';
 import { redactReport } from './assessment/redact';
 
 export const ENGINE = 'GhostWires Mk.IV';
-export const VERSION = '4.1.0';
+export const VERSION = '4.2.0';
 
 export interface ReconOptions { ct?: boolean; wayback?: boolean; mode?: 'public' | 'owner'; ownershipToken?: unknown; inventory?: unknown; signal?: AbortSignal; }
 

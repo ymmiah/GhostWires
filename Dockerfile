@@ -26,6 +26,7 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/dist-server ./dist-server
 # Defence in depth: make sure no .env ever ends up in the image.
 RUN rm -f .env .env.* || true
+RUN mkdir -p /data && chown node:node /data && chmod 700 /data
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

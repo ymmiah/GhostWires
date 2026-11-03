@@ -1,4 +1,4 @@
-# GhostWires 4.1: evidence-based surface assessment
+# GhostWires 4.2: evidence-based surface assessment
 
 This release adds structured HTTP exposure findings to the existing OSINT pipeline. It identifies public evidence and potential package-advisory matches; it does not establish that every vulnerability is absent or exploitable.
 
@@ -24,7 +24,7 @@ Owners can import a `composer.lock` file smaller than 2 MiB. The browser extract
 
 The visitor must opt in before package names and versions are submitted. The server queries only GitHub's public reviewed Composer advisory API, in at most five sequential requests, with a 2 MiB response cap, an eight-second deadline, no redirects and a bounded 15-minute memory cache. Neither the target URL nor an API key is sent to GitHub for this lookup. See https://docs.github.com/en/rest/security-advisories/global-advisories.
 
-The matcher confirms package identity and evaluates stable numeric comparator ranges locally. Unsupported syntax remains unknown and makes coverage partial. Withdrawn and unreviewed advisories are excluded. Failed, rate-limited, malformed, truncated or paginated responses do not become a clean bill of health. Potential matches need owner review of deployment accuracy, backports, configuration and reachability. Known-exploitation status is explicitly unknown; CISA KEV is not integrated in this release.
+The matcher confirms package identity and evaluates stable numeric comparator ranges locally. Unsupported syntax remains unknown and makes coverage partial. Withdrawn and unreviewed advisories are excluded. Failed, rate-limited, malformed, truncated or paginated responses do not become a clean bill of health. Potential matches need owner review of deployment accuracy, backports, configuration and reachability. Version 4.2 optionally enriches already matched CVE IDs with CISA KEV; freshness, absence and failure remain explicit. See [intelligence and workspace](WORKSPACE.md).
 
 PHP/database runtime CVE feeds and WordPress plugin advisory feeds are not included. Detecting those technologies does not imply advisory coverage for them.
 
@@ -34,7 +34,7 @@ Outbound HTTP uses Node HTTP/HTTPS with a socket lookup pinned to the public add
 
 Responses have deadlines, compressed and decompressed byte caps, explicit truncation and interruption errors. Scan work is limited to two concurrent recon/crawl jobs and one per initial hostname in each process. This is not a separate worker sandbox: process isolation, cross-replica quotas and network-level egress restrictions remain deployment hardening work. Direct pinned sockets require ordinary outbound network access; HTTP proxy environment variables are not used for target requests. Deployments requiring a proxy need a policy-enforcing proxy transport before enabling scans.
 
-Closing/cancelling the recon request cancels its primary HTTP, sitemap, security.txt and owner-check requests. Existing DNS, TLS, CT and Wayback operations may finish within their own deadlines. They are not falsely reported as completed cancelled checks. No scan history is persisted server-side; JSON exports remain visitor-controlled.
+Closing/cancelling the recon request cancels its primary HTTP, sitemap, security.txt and owner-check requests. Existing DNS, TLS, CT, Wayback and fixed-feed operations may finish within their own deadlines. They are not falsely reported as completed cancelled checks. Public scans are not saved automatically. The optional authenticated workspace stores a redacted assessment only when an authorised owner/analyst explicitly saves it; JSON exports remain visitor-controlled.
 
 Common credential assignments, credential-bearing connection URLs, known key formats, sensitive URL parameters and cookie/authentication header values are redacted before retaining a recon report. Owner-check findings retain signature descriptions rather than raw configuration or diagnostic bodies. This is defence in depth, not a guarantee of recognising every possible secret format; review exports before sharing them.
 
@@ -48,4 +48,4 @@ Run `npm ci`, `npm run typecheck`, `npm test`, `npm run build` and `npm run test
 
 Review the feature branch before merging: the existing Render blueprint automatically redeploys from main. Roll back by reverting the feature commit or deploying the previous container tag. Legacy report consumers remain compatible because `assessment` is optional in the shared report type; existing routes and providers remain available.
 
-Follow-on work: isolated scan workers, a signed local collector for PHP/database inventory, runtime and WordPress advisory feeds with explicit coverage/licensing, CISA KEV enrichment, scan comparison, shareable HTML/PDF reports and opt-in monitoring. None of those capabilities is represented as implemented by this release.
+Follow-on work: isolated scan workers, a signed local collector for PHP/database inventory, runtime and WordPress advisory feeds with explicit coverage/licensing, scan comparison, shareable HTML/PDF reports and opt-in monitoring. None of those capabilities is represented as implemented by this release. Version 4.2 adds only KEV enrichment, grouping and the optional owner workspace, with no telemetry connectors or autonomous response.

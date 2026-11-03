@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import type { SurfaceAssessment } from '../types';
 import { Chip, sevTone } from './ui';
 
 export const AssessmentPanel: React.FC<{ assessment?: SurfaceAssessment }> = ({ assessment: a }) => {
     const [filter, setFilter] = useState('all');
+    const [group, setGroup] = useState('all');
+    const panelId = useId();
     if (!a) return <p className="text-text-secondary text-sm">This legacy report does not contain a structured surface assessment. Run a new assessment.</p>;
-    const visible = a.findings.filter(f => filter === 'all' || f.severity === filter);
+    const selectedGroup = a.groups?.find(g => g.id === group);
+    const visible = a.findings.filter(f => (filter === 'all' || f.severity === filter) && (!selectedGroup || selectedGroup.findingIds.includes(f.id)));
     return <section aria-label="Attack surface findings" className="space-y-4">
         <div className="border border-cyber-blue/40 bg-cyber-blue/5 p-4">
             <div className="flex flex-wrap justify-between items-center gap-3">
@@ -15,12 +18,15 @@ export const AssessmentPanel: React.FC<{ assessment?: SurfaceAssessment }> = ({ 
             <p className="text-xs text-text-secondary mt-3">Exposure and version matches require context. Zero findings does not establish that the site or its databases are secure.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-            <label htmlFor="finding-severity" className="text-xs text-text-secondary">Severity</label>
-            <select id="finding-severity" value={filter} onChange={e => setFilter(e.target.value)} className="bg-hacker-dark border border-hacker-green/40 p-2 text-xs text-text-primary">
+            <label htmlFor={`${panelId}-severity`} className="text-xs text-text-secondary">Severity</label>
+            <select id={`${panelId}-severity`} value={filter} onChange={e => setFilter(e.target.value)} className="bg-hacker-dark border border-hacker-green/40 p-2 text-xs text-text-primary">
                 {['all', 'critical', 'high', 'medium', 'low', 'info'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            {!!a.groups?.length && <><label htmlFor={`${panelId}-group`} className="text-xs text-text-secondary">Related surface</label><select id={`${panelId}-group`} value={group} onChange={e => setGroup(e.target.value)} className="bg-hacker-dark border border-hacker-green/40 p-2 text-xs text-text-primary"><option value="all">All findings</option>{a.groups.map(g => <option key={g.id} value={g.id}>{g.title} ({g.findingIds.length})</option>)}</select></>}
             <span className="text-xs text-text-secondary">Severity describes impact; confidence describes the strength of the evidence.</span>
         </div>
+        {selectedGroup && <p className="text-xs text-text-secondary">{selectedGroup.reason}</p>}
+        {a.threatIntelligence && <p className="text-xs text-text-secondary">CISA KEV: {a.threatIntelligence.status} · {a.threatIntelligence.detail}</p>}
         {visible.map(f => <article key={f.id} className="border border-hacker-green/30 bg-hacker-dark-2 p-4 space-y-3">
             <div className="flex flex-wrap gap-2"><Chip tone={sevTone(f.severity)}>{f.severity}</Chip><Chip tone={f.status === 'potential-vulnerability' ? 'yellow' : 'blue'}>{f.status.replaceAll('-', ' ')}</Chip><Chip>{f.confidence} confidence</Chip></div>
             <h4 className="text-text-primary font-bold">{f.title}</h4>
@@ -31,7 +37,8 @@ export const AssessmentPanel: React.FC<{ assessment?: SurfaceAssessment }> = ({ 
                 <p><strong className="text-hacker-green">Fix: </strong>{f.remediation}</p>
                 <p><strong className="text-cyber-blue">Verify: </strong>{f.verification}</p>
                 {f.limitations.map((l, i) => <p key={i} className="text-xs text-yellow-300">{l}</p>)}
-                {f.advisory && <p className="text-xs text-text-secondary">{f.advisory.id}{f.advisory.cve ? ` · ${f.advisory.cve}` : ''} · Known exploitation: not assessed</p>}
+                {f.advisory && <p className="text-xs text-text-secondary">{f.advisory.id}{f.advisory.cve ? ` · ${f.advisory.cve}` : ''} · CISA KEV: {f.advisory.knownExploited === true ? 'listed — known exploitation elsewhere' : f.advisory.knownExploited === false ? 'not listed in this snapshot' : 'unknown / not assessed'}</p>}
+                {f.advisory?.kev && <p className="text-xs text-yellow-300">KEV action: {f.advisory.kev.requiredAction} · Added {f.advisory.kev.dateAdded}. This does not establish compromise of this asset.</p>}
                 <div className="flex flex-wrap gap-3 text-xs">{f.references.map(ref => <a key={ref} href={ref} target="_blank" rel="noopener noreferrer" className="text-cyber-blue underline break-all">{new URL(ref).hostname}</a>)}</div>
             </div>
         </article>)}

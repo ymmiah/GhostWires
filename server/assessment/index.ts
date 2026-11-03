@@ -5,6 +5,8 @@ import type { RobotsIntel } from '../../types';
 import { detectExposures } from './detect';
 import { assessAdvisories } from './advisories';
 import { redactReport } from './redact';
+import { kevClient } from './kev';
+import { groupFindings } from './groups';
 
 export const OWNER_PATHS = ['/.env', '/phpinfo.php', '/phpmyadmin/', '/adminer.php', '/.git/HEAD'] as const;
 
@@ -19,7 +21,7 @@ export async function assessSurface(page: SafeResponse, tech: TechHit[], mode: A
             'No SQL injection, authentication bypass, password testing, database queries or port scans were performed.',
             'Database services hidden behind the application cannot be assessed from a website URL.',
             'Signatures and version banners may be inaccurate or quoted content; review the evidence.',
-            'This release does not assess database runtime CVEs, WordPress plugin advisories or known-exploitation status.',
+            'This release does not assess database runtime CVEs or WordPress plugin advisories. KEV enrichment applies only to matched CVE IDs.',
         ],
         intelligence: { source: 'GitHub-reviewed Composer advisories', status: 'not-requested', detail: 'No package inventory supplied.' },
     };
@@ -54,8 +56,10 @@ export async function assessSurface(page: SafeResponse, tech: TechHit[], mode: A
     result.findings.push(...advisories.findings);
     result.coverage.push(advisories.coverage);
     result.intelligence = advisories.intelligence;
+    await kevClient.enrich(result);
     const weight = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
-    result.findings = [...new Map(result.findings.map(f => [f.id, f])).values()].sort((a, b) => weight[b.severity] - weight[a.severity] || a.id.localeCompare(b.id));
+    result.findings = [...new Map(result.findings.map(f => [f.id, f])).values()].sort((a, b) => Number(b.advisory?.knownExploited === true) - Number(a.advisory?.knownExploited === true) || weight[b.severity] - weight[a.severity] || a.id.localeCompare(b.id));
+    result.groups = groupFindings(result.scope, result.findings);
     result.components = [...new Map(result.components.map(c => [`${c.name}:${c.version || ''}:${c.source}`, c])).values()].slice(0, 100);
     return redactReport(result);
 }

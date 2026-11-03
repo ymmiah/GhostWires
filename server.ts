@@ -10,6 +10,8 @@ import { listProviders, redact, byokOnly, getProvider } from './server/ai/provid
 import { analyzeReport, describeImages, streamDebrief } from './server/ai/intel';
 import { createOwnershipChallenge } from './server/assessment/ownership';
 import { withScanSlot } from './server/assessment/slots';
+import { WorkspaceStore } from './server/workspace/store';
+import { workspaceRouter, sessionFromRequest } from './server/workspace/routes';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -51,6 +53,10 @@ async function startServer() {
     app.disable('x-powered-by');
     app.use(express.json({ limit: '5mb' }));
     const isProd = process.env.NODE_ENV === 'production' || /server\.cjs$/.test(process.argv[1] || '');
+    const secureCookies = process.env.NODE_ENV === 'production';
+    if (process.env.GHOSTWIRES_WORKSPACE_DB && !path.isAbsolute(process.env.GHOSTWIRES_WORKSPACE_DB)) throw new Error('GHOSTWIRES_WORKSPACE_DB must be an absolute path on persistent storage.');
+    const workspace = process.env.GHOSTWIRES_WORKSPACE_DB ? new WorkspaceStore(process.env.GHOSTWIRES_WORKSPACE_DB, Number(process.env.GHOSTWIRES_RETENTION_DAYS || 30)) : null;
+    if (workspace) setInterval(() => { try { workspace.purge(); } catch { console.error('[GhostWires] Workspace retention purge failed.'); } }, 60 * 60_000).unref();
     app.use((_req, res, next) => {
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Referrer-Policy', 'no-referrer');
@@ -76,6 +82,7 @@ async function startServer() {
     });
 
     app.get('/api/providers', (_req, res) => res.json(listProviders()));
+    app.use('/api/workspace', workspaceRouter(workspace, secureCookies));
 
     app.use(['/api/recon', '/api/crawl', '/api/ownership'], noStore);
     app.post('/api/ownership/challenge', rateLimit('ownership', 5, 60_000), async (req: Request, res: Response) => {
@@ -89,7 +96,10 @@ async function startServer() {
         res.on('close', cancel);
         try {
             const { url, ct = true, wayback = true, mode = 'public', ownershipToken, inventory } = req.body || {};
-            res.json(await withScanSlot(String(url || ''), () => runRecon(String(url || ''), { ct: !!ct, wayback: !!wayback, mode, ownershipToken, inventory, signal: controller.signal })));
+            const report = await withScanSlot(String(url || ''), () => runRecon(String(url || ''), { ct: !!ct, wayback: !!wayback, mode, ownershipToken, inventory, signal: controller.signal }));
+            const principal = sessionFromRequest(workspace, req, secureCookies);
+            if (principal && report.assessment) report.workspaceReceipt = workspace!.receipt(report.assessment, principal);
+            res.json(report);
         } catch (e) { if (!res.destroyed) sendError(res, e); }
         finally { res.off('close', cancel); }
     });

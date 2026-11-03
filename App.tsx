@@ -8,6 +8,7 @@ import { api } from './api';
 import { KeyModal } from './components/KeyModal';
 import { TypingTitle } from './components/TypingTitle';
 import { AssessmentControls, type AssessmentOptions } from './components/AssessmentControls';
+import { WorkspacePanel } from './components/WorkspacePanel';
 import { loadKey, wipeKey, subscribe, installWipeOnClose, maskKey, type StoredKey } from './keyVault';
 import type { ReconReport, AIAnalysis, CrawlResult, ChatMessage, ProvidersResponse, AIProviderId } from './types';
 
@@ -91,76 +92,88 @@ const App: React.FC = () => {
         const target = url.trim();
         if (!target) { setError('Enter a target URL or domain.'); return; }
         if (assessmentOptions.mode === 'owner' && !assessmentOptions.ownershipToken) { setError('Create a DNS proof and publish its TXT record before running owner checks.'); return; }
-        scanGeneration.current++;
+        const generation = ++scanGeneration.current;
         const controller = new AbortController();
         scanController.current = controller;
         setIsLoading(true); setError(null); setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setImageNotes({});
         setAiState({ loading: false, error: null });
         setLog([`[${ts()}] > GhostWires Mk.IV — passive OSINT pipeline engaged against ${target}`]);
         let i = 0;
-        const ticker = setInterval(() => { if (i < MODULES.length) push(`> module: ${MODULES[i++]}`); }, 450);
+        const ticker = setInterval(() => { if (generation === scanGeneration.current && i < MODULES.length) push(`> module: ${MODULES[i++]}`); }, 450);
         try {
             const rep = await api.recon(target, useCT, useWayback, assessmentOptions, controller.signal);
             clearInterval(ticker);
+            if (generation !== scanGeneration.current) return;
             setReport(rep);
             setUrl(rep.target.finalUrl);
             push(`> RECON COMPLETE in ${(rep.durationMs / 1000).toFixed(1)}s — ${rep.tech.length} tech, ${rep.contacts.emails.length} emails, ${rep.ct.subdomains.length} CT subdomains, headers ${rep.headers.grade}.`);
             if (autoAI && (loadKey() || providerId)) runAI(rep);
         } catch (e: any) {
             clearInterval(ticker);
+            if (generation !== scanGeneration.current) return;
             if (e.name === 'AbortError') push('> Assessment cancelled.');
             else { setError(`// ERROR: ${e.message}`); push(`> PROTOCOL FAILED: ${e.message}`); }
         } finally {
-            scanController.current = null;
-            setIsLoading(false);
+            if (scanController.current === controller) scanController.current = null;
+            if (generation === scanGeneration.current) setIsLoading(false);
         }
     }, [url, useCT, useWayback, autoAI, providerId, runAI, assessmentOptions]);
 
     const handleCrawl = useCallback(async (maxPages: number) => {
         if (!report) return;
+        const generation = scanGeneration.current;
         setIsCrawling(true);
         push(`> Polite crawler started (≤${maxPages} pages, robots.txt honoured)…`);
         try {
             const c = await api.crawl(report.target.finalUrl, maxPages);
+            if (generation !== scanGeneration.current) return;
             setCrawl(c);
             push(`> Crawl COMPLETE: ${c.pages.length} pages, ${c.skippedByRobots.length} skipped by robots.txt.`);
         } catch (e: any) {
+            if (generation !== scanGeneration.current) return;
             push(`> CRAWL ERROR: ${e.message}`);
             setError(`// CRAWL ERROR: ${e.message}`);
-        } finally { setIsCrawling(false); }
+        } finally { if (generation === scanGeneration.current) setIsCrawling(false); }
     }, [report]);
 
     const handleImages = useCallback(async (srcs: string[]) => {
         if (!report) return;
+        const generation = scanGeneration.current;
         setIsAnalyzingImages(true);
         try {
             const res = await api.vision(srcs, report.target.finalUrl, providerId || undefined);
+            if (generation !== scanGeneration.current) return;
             setImageNotes(prev => ({ ...prev, ...Object.fromEntries(res.results.map(r => [r.src, { text: r.detailedDescription, error: r.error }])) }));
             push(`> Vision: ${res.results.filter(r => r.detailedDescription).length}/${res.results.length} images described.`);
         } catch (e: any) {
+            if (generation !== scanGeneration.current) return;
             setError(`// VISION ERROR: ${e.message}`);
-        } finally { setIsAnalyzingImages(false); }
+        } finally { if (generation === scanGeneration.current) setIsAnalyzingImages(false); }
     }, [report, providerId]);
 
     const handleSend = async (message: string) => {
         if (!report || isChatLoading) return;
+        const generation = scanGeneration.current;
         const history: ChatMessage[] = [...chat, { role: 'user', content: message }];
         setChat([...history, { role: 'model', content: '' }]);
         setIsChatLoading(true);
         let acc = '';
         try {
             await api.chat(report, history, providerId || undefined, d => {
+                if (generation !== scanGeneration.current) return;
                 acc += d;
                 setChat(prev => { const n = [...prev]; n[n.length - 1] = { role: 'model', content: acc }; return n; });
             });
         } catch (e: any) {
+            if (generation !== scanGeneration.current) return;
             setChat(prev => { const n = [...prev]; n[n.length - 1] = { role: 'model', content: `// ERROR: DEBRIEF OFFLINE — ${e.message}` }; return n; });
-        } finally { setIsChatLoading(false); }
+        } finally { if (generation === scanGeneration.current) setIsChatLoading(false); }
     };
 
     const handleDownload = () => {
         if (!report) return;
-        const blob = new Blob([JSON.stringify({ report, analysis, crawl, imageNotes }, null, 2)], { type: 'application/json' });
+        const { workspaceReceipt: _receipt, ...exportReport } = report;
+        const blob = new Blob([JSON.stringify({ report: exportReport, analysis, crawl, imageNotes }, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = `ghostwires-mk4-${report.target.hostname}-${new Date().toISOString().slice(0, 10)}.json`;
@@ -168,7 +181,7 @@ const App: React.FC = () => {
         URL.revokeObjectURL(a.href);
     };
 
-    const handleNewScan = () => { scanGeneration.current++; setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setLog([]); setError(null); setImageNotes({}); };
+    const handleNewScan = () => { scanGeneration.current++; setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setLog([]); setError(null); setImageNotes({}); setIsLoading(false); setIsCrawling(false); setIsAnalyzingImages(false); setIsChatLoading(false); };
 
     const toggle = 'flex items-center gap-1 cursor-pointer select-none';
     return (
@@ -207,6 +220,7 @@ const App: React.FC = () => {
                         : <p className="text-[10px] text-text-secondary text-right px-1">AI is optional — recon runs without a key. Your key is never stored server-side and is wiped when this tab closes.</p>}
 
                     <AssessmentControls url={url} disabled={isLoading || isCrawling} onChange={setAssessmentOptions} />
+                    <WorkspacePanel report={report} onIdentityChange={() => { scanController.current?.abort(); handleNewScan(); wipeKey('user'); setAiState({ loading: false, error: null }); }} />
 
                     {error && (
                         <div className="mt-3 border border-hacker-red/50 bg-hacker-red/10 text-hacker-red px-4 py-3 whitespace-pre-wrap" role="alert">

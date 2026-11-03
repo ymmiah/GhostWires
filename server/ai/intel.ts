@@ -26,6 +26,8 @@ export function factDigest(r: ReconReport) {
             coverage: r.assessment.coverage,
             limitations: r.assessment.limitations,
             intelligence: r.assessment.intelligence,
+            threatIntelligence: r.assessment.threatIntelligence,
+            groups: r.assessment.groups,
         } : { limitations: ['Legacy report: structured exposure checks were not performed.'] },
     });
 }

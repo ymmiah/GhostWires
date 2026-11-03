@@ -28,3 +28,6 @@ dist-ssr
 .env.*
 !.env.example
 dist-server
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

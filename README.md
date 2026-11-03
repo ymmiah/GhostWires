@@ -1,5 +1,11 @@
 # 👻 GhostWires Mk.IV
 
+## New in 4.2 — lightweight intelligence and owner workspace
+
+Matched CVEs can now show **CISA KEV** context, with current/stale/unavailable states, and related findings can be filtered by technical surface. An optional, collapsed **Workspace** panel adds sign-in, saved DNS-verified assessments, an evidence timeline and human review states. Owner/analyst/viewer permissions, tenant isolation and fixed retention protect saved data.
+
+This stays inside the existing Node app, uses a single local SQLite database and adds no runtime packages or services. Saved workspaces require persistent storage and local account provisioning; they remain disabled on the existing ephemeral deployment until configured. See [workspace setup, permissions and limits](docs/WORKSPACE.md).
+
 ## New in 4.1 — evidence-based surface assessment
 
 The **Findings** tab now separates observed PHP/database exposures from potential Composer advisory matches, with evidence, confidence, fixes, verification steps and explicit coverage gaps. Public mode adds no diagnostic-path probing. DNS-verified owner mode adds five bounded checks for public configuration, PHP diagnostics, database administration tools and Git metadata. Owners can optionally import Composer production package versions for GitHub-reviewed advisory matching, with explicit consent.
@@ -134,7 +140,7 @@ CI (`.github/workflows/ci.yml`) type-checks, builds, boots the server without an
 
 ## 🚀 Quick start
 
-Requirements: **Node.js ≥ 20.12**.
+Requirements: **Node.js ≥ 22.16**.
 
 ```bash
 git clone https://github.com/ymmiah/GhostWires.git

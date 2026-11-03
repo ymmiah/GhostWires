@@ -165,6 +165,7 @@ export interface ReconReport {
     wayback: WaybackIntel;
     notes: string[];
     assessment?: SurfaceAssessment; // optional for backwards-compatible report imports
+    workspaceReceipt?: string; // short-lived, session-bound permission to save an owner assessment
 }
 
 export type AssessmentMode = 'public' | 'owner';
@@ -184,7 +185,7 @@ export interface SurfaceFinding {
     verification: string;
     limitations: string[];
     references: string[];
-    advisory?: { id: string; cve?: string; affectedRange: string; fixedVersion?: string; knownExploited: boolean | null };
+    advisory?: { id: string; cve?: string; affectedRange: string; fixedVersion?: string; knownExploited: boolean | null; kev?: { dateAdded: string; requiredAction: string; ransomwareUse: string } };
 }
 export interface AssessmentCoverage {
     checkId: string;
@@ -208,6 +209,8 @@ export interface SurfaceAssessment {
     coverage: AssessmentCoverage[];
     limitations: string[];
     intelligence: { source: string; retrievedAt?: string; status: 'not-requested' | 'current' | 'partial' | 'unavailable'; detail: string };
+    threatIntelligence?: { source: string; status: 'not-requested' | 'current' | 'stale' | 'unavailable'; retrievedAt?: string; catalogVersion?: string; detail: string };
+    groups?: { id: string; title: string; reason: string; findingIds: string[] }[];
 }
 export interface OwnershipChallenge {
     origin: string;
@@ -217,6 +220,24 @@ export interface OwnershipChallenge {
     expiresAt: string;
 }
 export interface InventoryPackage { name: string; version: string; }
+
+export type WorkspaceRole = 'owner' | 'analyst' | 'viewer';
+export type ReviewState = 'open' | 'in-review' | 'resolved' | 'accepted-risk';
+export interface WorkspaceSession {
+    enabled: boolean;
+    user?: { email: string; role: WorkspaceRole; workspace: string };
+    csrfToken?: string;
+    retentionDays?: number;
+}
+export interface InvestigationSummary {
+    id: string; scope: string; title: string; state: ReviewState;
+    createdAt: string; updatedAt: string; expiresAt: string; findingCount: number; kevCount: number;
+    version: number;
+}
+export interface Investigation extends InvestigationSummary {
+    assessment: SurfaceAssessment;
+    timeline: { sequence: number; at: string; actor: string; action: 'saved' | 'reviewed' | 'note'; detail: string }[];
+}
 
 export interface CrawlPage {
     url: string;
