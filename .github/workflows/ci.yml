@@ -19,7 +19,9 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
+      - run: npm run test:smoke
       - name: Smoke test (server boots with no API keys, BYOK-only)
         env:
           PORT: 3000

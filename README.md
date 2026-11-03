@@ -1,5 +1,13 @@
 # 👻 GhostWires Mk.IV
 
+## New in 4.1 — evidence-based surface assessment
+
+The **Findings** tab now separates observed PHP/database exposures from potential Composer advisory matches, with evidence, confidence, fixes, verification steps and explicit coverage gaps. Public mode adds no diagnostic-path probing. DNS-verified owner mode adds five bounded checks for public configuration, PHP diagnostics, database administration tools and Git metadata. Owners can optionally import Composer production package versions for GitHub-reviewed advisory matching, with explicit consent.
+
+Outbound requests now pin socket DNS to validated public addresses, enforce scope on owner redirects, cap decompressed responses and expose incomplete coverage. AI guidance links to existing finding IDs. These checks do not prove SQL injection or database access and do not cover all runtime/plugin vulnerabilities.
+
+Read [assessment scope, privacy, verification and limitations](docs/ASSESSMENT.md). Validate with `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:smoke`.
+
 [![CI](https://github.com/ymmiah/GhostWires/actions/workflows/ci.yml/badge.svg)](https://github.com/ymmiah/GhostWires/actions/workflows/ci.yml)
 [![Docker image](https://github.com/ymmiah/GhostWires/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ymmiah/GhostWires/pkgs/container/ghostwires)
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ymmiah/GhostWires)
@@ -251,7 +259,7 @@ React 18 · Vite 6 · Express 5 · TypeScript · cheerio · `@google/genai` · T
 
 ## Known limitations
 
-- DNS-rebinding between the SSRF check and the socket connect is mitigated (every hop is re-validated) but not fully eliminated; run GhostWires on a machine without access to sensitive internal services if you expose it publicly.
+- Target HTTP sockets use the public DNS addresses checked before each hop; run public deployments with network-level egress restrictions as defence in depth. Deployments requiring an outbound HTTP proxy need a policy-enforcing proxy transport; target requests use direct pinned sockets.
 - crt.sh is a free community service and is frequently rate-limited — the UI reports this instead of failing the scan.
 - Pages rendered entirely client-side expose less HTML to the passive analysis.
 

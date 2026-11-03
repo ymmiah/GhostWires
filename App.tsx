@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { UrlInput } from './components/UrlInput';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { TerminalLog } from './components/TerminalLog';
@@ -7,6 +7,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { api } from './api';
 import { KeyModal } from './components/KeyModal';
 import { TypingTitle } from './components/TypingTitle';
+import { AssessmentControls, type AssessmentOptions } from './components/AssessmentControls';
 import { loadKey, wipeKey, subscribe, installWipeOnClose, maskKey, type StoredKey } from './keyVault';
 import type { ReconReport, AIAnalysis, CrawlResult, ChatMessage, ProvidersResponse, AIProviderId } from './types';
 
@@ -32,6 +33,9 @@ const App: React.FC = () => {
     const [imageNotes, setImageNotes] = useState<Record<string, { text: string; error?: string }>>({});
     const [isAnalyzingImages, setIsAnalyzingImages] = useState(false);
     const [chat, setChat] = useState<ChatMessage[]>([]);
+    const [assessmentOptions, setAssessmentOptions] = useState<AssessmentOptions>({ mode: 'public' });
+    const scanController = useRef<AbortController | null>(null);
+    const scanGeneration = useRef(0);
     const [isChatLoading, setIsChatLoading] = useState(false);
 
     const [byokKey, setByokKey] = useState<StoredKey | null>(null);
@@ -61,6 +65,7 @@ const App: React.FC = () => {
     const forgetKey = () => { wipeKey('user'); setAnalysis(null); setChat([]); push('> BYOK key wiped from this tab.'); };
 
     const runAI = useCallback(async (rep: ReconReport, pid = providerId) => {
+        const generation = scanGeneration.current;
         const k = loadKey();
         if (k) pid = k.provider;
         if (!pid || (!k && !providers?.providers.find(p => p.id === pid)?.configured)) {
@@ -71,10 +76,12 @@ const App: React.FC = () => {
         push(`> AI layer: ${pid} analysing verified facts…`);
         try {
             const a = await api.analyze(rep, pid);
+            if (generation !== scanGeneration.current) return;
             setAnalysis(a);
             setAiState({ loading: false, error: null });
             push(`> AI analysis OK (${a.model}).`);
         } catch (e: any) {
+            if (generation !== scanGeneration.current) return;
             setAiState({ loading: false, error: `AI analysis failed: ${e.message}` });
             push(`> AI ERROR: ${e.message}`);
         }
@@ -83,13 +90,17 @@ const App: React.FC = () => {
     const handleExtract = useCallback(async () => {
         const target = url.trim();
         if (!target) { setError('Enter a target URL or domain.'); return; }
+        if (assessmentOptions.mode === 'owner' && !assessmentOptions.ownershipToken) { setError('Create a DNS proof and publish its TXT record before running owner checks.'); return; }
+        scanGeneration.current++;
+        const controller = new AbortController();
+        scanController.current = controller;
         setIsLoading(true); setError(null); setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setImageNotes({});
         setAiState({ loading: false, error: null });
         setLog([`[${ts()}] > GhostWires Mk.IV — passive OSINT pipeline engaged against ${target}`]);
         let i = 0;
         const ticker = setInterval(() => { if (i < MODULES.length) push(`> module: ${MODULES[i++]}`); }, 450);
         try {
-            const rep = await api.recon(target, useCT, useWayback);
+            const rep = await api.recon(target, useCT, useWayback, assessmentOptions, controller.signal);
             clearInterval(ticker);
             setReport(rep);
             setUrl(rep.target.finalUrl);
@@ -97,12 +108,13 @@ const App: React.FC = () => {
             if (autoAI && (loadKey() || providerId)) runAI(rep);
         } catch (e: any) {
             clearInterval(ticker);
-            setError(`// ERROR: ${e.message}`);
-            push(`> PROTOCOL FAILED: ${e.message}`);
+            if (e.name === 'AbortError') push('> Assessment cancelled.');
+            else { setError(`// ERROR: ${e.message}`); push(`> PROTOCOL FAILED: ${e.message}`); }
         } finally {
+            scanController.current = null;
             setIsLoading(false);
         }
-    }, [url, useCT, useWayback, autoAI, providerId, runAI]);
+    }, [url, useCT, useWayback, autoAI, providerId, runAI, assessmentOptions]);
 
     const handleCrawl = useCallback(async (maxPages: number) => {
         if (!report) return;
@@ -156,7 +168,7 @@ const App: React.FC = () => {
         URL.revokeObjectURL(a.href);
     };
 
-    const handleNewScan = () => { setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setLog([]); setError(null); setImageNotes({}); };
+    const handleNewScan = () => { scanGeneration.current++; setReport(null); setAnalysis(null); setCrawl(null); setChat([]); setLog([]); setError(null); setImageNotes({}); };
 
     const toggle = 'flex items-center gap-1 cursor-pointer select-none';
     return (
@@ -171,6 +183,7 @@ const App: React.FC = () => {
 
                 <div className="max-w-4xl mx-auto">
                     <UrlInput url={url} setUrl={setUrl} onExtract={handleExtract} isLoading={isLoading || isCrawling} />
+                    {isLoading && <button type="button" onClick={() => scanController.current?.abort()} className="mt-2 text-xs border border-hacker-red/50 px-3 py-2 text-hacker-red">Cancel assessment</button>}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary mt-2 px-1">
                         <label className={toggle}><input type="checkbox" checked={useCT} onChange={e => setUseCT(e.target.checked)} className="accent-[#00ff41]" /> CT logs (crt.sh)</label>
                         <label className={toggle}><input type="checkbox" checked={useWayback} onChange={e => setUseWayback(e.target.checked)} className="accent-[#00ff41]" /> Wayback</label>
@@ -192,6 +205,8 @@ const App: React.FC = () => {
                     </div>
                     {provider ? <p className="text-[10px] text-text-secondary text-right px-1">AI: {provider.label}{provider.model ? ` · ${provider.model}` : ''}{!provider.vision && ' · image analysis unavailable for this provider'}</p>
                         : <p className="text-[10px] text-text-secondary text-right px-1">AI is optional — recon runs without a key. Your key is never stored server-side and is wiped when this tab closes.</p>}
+
+                    <AssessmentControls url={url} disabled={isLoading || isCrawling} onChange={setAssessmentOptions} />
 
                     {error && (
                         <div className="mt-3 border border-hacker-red/50 bg-hacker-red/10 text-hacker-red px-4 py-3 whitespace-pre-wrap" role="alert">

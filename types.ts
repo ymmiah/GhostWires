@@ -117,6 +117,7 @@ export interface RobotsIntel {
     sitemaps: string[];
     crawlDelay?: number;
     raw?: string;
+    error?: string;
 }
 
 export interface SitemapIntel {
@@ -163,7 +164,59 @@ export interface ReconReport {
     ct: CTIntel;
     wayback: WaybackIntel;
     notes: string[];
+    assessment?: SurfaceAssessment; // optional for backwards-compatible report imports
 }
+
+export type AssessmentMode = 'public' | 'owner';
+export type FindingConfidence = 'high' | 'medium' | 'low';
+export interface SurfaceFinding {
+    id: string;
+    checkId: string;
+    title: string;
+    severity: Severity;
+    confidence: FindingConfidence;
+    status: 'observed-exposure' | 'potential-vulnerability';
+    asset: string;
+    observedAt: string;
+    evidence: string[];
+    impact: string;
+    remediation: string;
+    verification: string;
+    limitations: string[];
+    references: string[];
+    advisory?: { id: string; cve?: string; affectedRange: string; fixedVersion?: string; knownExploited: boolean | null };
+}
+export interface AssessmentCoverage {
+    checkId: string;
+    label: string;
+    status: 'completed' | 'partial' | 'not-assessed' | 'blocked' | 'error';
+    detail: string;
+}
+export interface ObservedComponent {
+    name: string;
+    version?: string;
+    source: string;
+    confidence: FindingConfidence;
+}
+export interface SurfaceAssessment {
+    schemaVersion: '1.0';
+    mode: AssessmentMode;
+    generatedAt: string;
+    scope: string;
+    findings: SurfaceFinding[];
+    components: ObservedComponent[];
+    coverage: AssessmentCoverage[];
+    limitations: string[];
+    intelligence: { source: string; retrievedAt?: string; status: 'not-requested' | 'current' | 'partial' | 'unavailable'; detail: string };
+}
+export interface OwnershipChallenge {
+    origin: string;
+    recordName: string;
+    recordValue: string;
+    token: string;
+    expiresAt: string;
+}
+export interface InventoryPackage { name: string; version: string; }
 
 export interface CrawlPage {
     url: string;
@@ -192,6 +245,7 @@ export interface AIAnalysis {
     a11yNarrative: string;
     securityNarrative: string;
     recommendations: string[];
+    findingGuidance?: { findingId: string; explanation: string; recommendation: string }[];
 }
 
 export interface ProviderInfo {

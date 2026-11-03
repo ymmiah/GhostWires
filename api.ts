@@ -1,12 +1,12 @@
 // GhostWires Mk.IV — browser API client. All secrets stay on the server.
 import { authHeaders } from './keyVault';
-import type { ReconReport, CrawlResult, AIAnalysis, ProvidersResponse, ChatMessage } from './types';
+import type { ReconReport, CrawlResult, AIAnalysis, ProvidersResponse, ChatMessage, AssessmentMode, OwnershipChallenge, InventoryPackage } from './types';
 
-async function post<T>(path: string, body: unknown, withKey = false): Promise<T> {
+async function post<T>(path: string, body: unknown, withKey = false, signal?: AbortSignal): Promise<T> {
     const res = await fetch(path, {
         method: 'POST', credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
         headers: { 'Content-Type': 'application/json', ...(withKey ? authHeaders() : {}) },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body), signal,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error((data as any).error || `${path} failed with HTTP ${res.status}`);
@@ -16,7 +16,8 @@ async function post<T>(path: string, body: unknown, withKey = false): Promise<T>
 export const api = {
     health: () => fetch('/api/health').then(r => r.json()),
     providers: () => fetch('/api/providers').then(r => r.json() as Promise<ProvidersResponse>),
-    recon: (url: string, ct: boolean, wayback: boolean) => post<ReconReport>('/api/recon', { url, ct, wayback }),
+    recon: (url: string, ct: boolean, wayback: boolean, options: { mode?: AssessmentMode; ownershipToken?: string; inventory?: InventoryPackage[] } = {}, signal?: AbortSignal) => post<ReconReport>('/api/recon', { url, ct, wayback, ...options }, false, signal),
+    ownershipChallenge: (url: string) => post<OwnershipChallenge>('/api/ownership/challenge', { url }),
     crawl: (url: string, maxPages: number) => post<CrawlResult>('/api/crawl', { url, maxPages }),
     analyze: (report: ReconReport, provider?: string) => post<AIAnalysis>('/api/ai/analyze', { report, provider }, true),
     vision: (images: string[], pageUrl: string, provider?: string) =>

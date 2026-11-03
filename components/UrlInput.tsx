@@ -34,6 +34,7 @@ export const UrlInput: React.FC<UrlInputProps> = ({ url, setUrl, onExtract, isLo
                  <div className="pl-3 pr-2"><TerminalIcon /></div>
                  <input
                     type="text"
+                    aria-label="Target URL or domain"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -45,6 +46,7 @@ export const UrlInput: React.FC<UrlInputProps> = ({ url, setUrl, onExtract, isLo
             </div>
             <button
                 onClick={handleAction}
+                aria-label={isLoading ? 'Assessment running' : 'Run assessment'}
                 disabled={isLoading}
                 className="shrink-0 flex items-center justify-center bg-hacker-green/10 hover:bg-cyber-blue/20 text-hacker-green hover:text-cyber-blue font-bold py-2 px-4 border border-hacker-green hover:border-cyber-blue transition-all duration-300 disabled:bg-hacker-dark-2 disabled:text-hacker-green/40 disabled:border-hacker-green/40 disabled:cursor-not-allowed disabled:shadow-none hover:shadow-glow-blue rounded-sm"
             >

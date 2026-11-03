@@ -8,6 +8,8 @@ import { safeFetch, TargetError } from './server/net';
 import { rateLimit } from './server/rateLimit';
 import { listProviders, redact, byokOnly, getProvider } from './server/ai/providers';
 import { analyzeReport, describeImages, streamDebrief } from './server/ai/intel';
+import { createOwnershipChallenge } from './server/assessment/ownership';
+import { withScanSlot } from './server/assessment/slots';
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -75,17 +77,27 @@ async function startServer() {
 
     app.get('/api/providers', (_req, res) => res.json(listProviders()));
 
+    app.use(['/api/recon', '/api/crawl', '/api/ownership'], noStore);
+    app.post('/api/ownership/challenge', rateLimit('ownership', 5, 60_000), async (req: Request, res: Response) => {
+        try { res.json(await createOwnershipChallenge(String(req.body?.url || ''))); }
+        catch (e) { sendError(res, e); }
+    });
+
     app.post('/api/recon', rateLimit('recon', 10, 60_000), async (req: Request, res: Response) => {
+        const controller = new AbortController();
+        const cancel = () => { if (!res.writableEnded) controller.abort(); };
+        res.on('close', cancel);
         try {
-            const { url, ct = true, wayback = true } = req.body || {};
-            res.json(await runRecon(String(url || ''), { ct: !!ct, wayback: !!wayback }));
-        } catch (e) { sendError(res, e); }
+            const { url, ct = true, wayback = true, mode = 'public', ownershipToken, inventory } = req.body || {};
+            res.json(await withScanSlot(String(url || ''), () => runRecon(String(url || ''), { ct: !!ct, wayback: !!wayback, mode, ownershipToken, inventory, signal: controller.signal })));
+        } catch (e) { if (!res.destroyed) sendError(res, e); }
+        finally { res.off('close', cancel); }
     });
 
     app.post('/api/crawl', rateLimit('crawl', 3, 60_000), async (req: Request, res: Response) => {
         try {
             const { url, maxPages = 12, maxDepth = 2 } = req.body || {};
-            res.json(await runCrawl(String(url || ''), Number(maxPages), Math.min(Number(maxDepth) || 2, 3)));
+            res.json(await withScanSlot(String(url || ''), () => runCrawl(String(url || ''), Number(maxPages), Math.min(Number(maxDepth) || 2, 3))));
         } catch (e) { sendError(res, e); }
     });
 
