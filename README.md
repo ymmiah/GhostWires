@@ -272,3 +272,38 @@ React 18 · Vite 6 · Express 5 · TypeScript · cheerio · `@google/genai` · T
 ---
 
 **Author:** Yasin Mohammed Miah, Student of BCU, BSc Computing Top-Up (Hons) · For education and authorised security assessment only.
+
+
+## v4.3.0 — technology and vulnerability intelligence
+
+Reports now include searchable technology cards, product-specific version evidence,
+conflicting-version warnings, WordPress plugin/theme path discovery and NVD research
+links. The Findings tab includes the technology inventory plus text, severity,
+related-surface and advisory/exposure filters. Coverage details are collapsed by default.
+
+Recon may read up to three explicitly linked same-origin JS/CSS asset prefixes
+(128 KiB each, four-second request timeout), respecting robots policy and crawl
+delay. It does not execute JavaScript or request guessed diagnostic paths in public
+mode. Cookie names, generator fields, headers, asset URLs and library banners supply
+evidence. A plugin path is not proof of its installed version. Hidden PHP/database
+versions remain unknown; arbitrary asset query parameters are not WordPress versions.
+
+For up to three recognised products with unambiguous exact stable x.y.z versions,
+the server queries NVD's CVE API with explicit product CPE identities. Requests are
+paced at least 6.1 seconds apart, cached for one hour and shared between concurrent
+lookups. Each request is bounded to 100 records and 2 MiB. Pagination, missing
+configuration data and feed failures are reported as incomplete/unknown, never as
+proof that a site has no vulnerabilities. Only product-specific affected-version
+entries become potential vulnerability findings. Distribution backports, runtime
+use and environment prerequisites still require owner verification. CISA KEV
+then enriches exact CVE IDs using the existing pipeline. Only product identities
+and versions are sent to NVD, not target URLs or page contents. New lookups may
+add several seconds to an assessment.
+
+## Open source and future versions
+
+**GhostWires v4.3.0 is open source under MIT.** The copyright holder may choose
+another licence, including proprietary terms, for future releases where they hold
+the necessary rights. Earlier MIT releases retain their original permissions;
+removing downloads or changing the repository's visibility does not revoke them.
+See [LICENSE](LICENSE) and [release licensing policy](LICENSING.md).

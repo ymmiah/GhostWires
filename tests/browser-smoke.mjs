@@ -48,10 +48,10 @@ try {
     a.findings[0].advisory.kev = { dateAdded: '2026-11-02', requiredAction: 'Apply the fixture vendor fix.', ransomwareUse: 'Unknown' };
     a.groups = [{ id: 'fixture-group', title: 'Dependency advisories', reason: 'Shared origin; no compromise is asserted.', findingIds: ['fixture-finding'] }];
     const report = {
-        engine: 'GhostWires Mk.IV v4.2.0', generatedAt: a.generatedAt, durationMs: 10,
+        engine: 'GhostWires Mk.IV v4.3.0', generatedAt: a.generatedAt, durationMs: 10,
         target: { input: 'https://example.com/', url: 'https://example.com/', finalUrl: 'https://example.com/', hostname: 'example.com', registrableDomain: 'example.com', status: 200, contentType: 'text/html', bytes: 10, responseTimeMs: 10, redirectChain: [], resolvedIPs: [] },
         dns: { a: [], aaaa: [], cname: [], mx: [], ns: [], txt: [], caa: [], reverse: {}, emailSecurity: { spf: null, dmarc: null, dmarcPolicy: null, findings: [] }, errors: [], resolver: 'system', saasFootprint: [] },
-        tls: { available: false, sans: [] }, headers: { score: 100, grade: 'A', findings: [], disclosure: [], cookies: [], raw: {} }, tech: [], contacts: { emails: [], phones: [], socials: [], addresses: [] },
+        tls: { available: false, sans: [] }, headers: { score: 100, grade: 'A', findings: [], disclosure: [], cookies: [], raw: {} }, tech: [{ name: 'PHP', category: 'Language', version: '8.1.2', evidence: 'header x-powered-by: PHP/8.1.2', versionEvidence: 'Exact header version', confidence: 'high' }, { name: 'WordPress', category: 'CMS', evidence: 'wp-content path', confidence: 'medium' }], contacts: { emails: [], phones: [], socials: [], addresses: [] },
         meta: { title: 'Fixture website', description: '', keywords: [], lang: 'en', canonical: '', generator: '', robotsMeta: '', og: {}, twitter: {}, headings: { h1: [], h2: [] }, wordCount: 0, textSample: '', jsonLdTypes: [] },
         links: [], images: [], subfolders: [], forms: [], accessibility: { score: 100, issues: [] }, robots: { found: false, disallow: [], allow: [], sitemaps: [] }, sitemap: { found: false, urlCount: 0, sample: [], nestedSitemaps: [] }, securityTxt: { found: false, contact: [], policy: [] }, ct: { enabled: false, subdomains: [], certCount: 0 }, wayback: { enabled: false, available: false }, notes: [], assessment: a, workspaceReceipt: store.receipt(a, principal),
     };
@@ -61,6 +61,25 @@ try {
     await page.getByRole('tab', { name: 'Findings', exact: true }).click();
     await page.getByText('listed — known exploitation elsewhere', { exact: false }).waitFor();
     await page.getByLabel('Related surface').selectOption('fixture-group');
+    const inventory = page.getByRole('region', { name: 'Technology inventory', exact: true });
+    await inventory.getByLabel('Search technologies, versions and evidence').fill('8.1.2');
+    assert.equal(await inventory.getByRole('article').count(), 1);
+    await inventory.getByLabel('Search technologies, versions and evidence').fill('');
+    await inventory.getByLabel('Technology category').selectOption('CMS');
+    assert.equal(await inventory.getByRole('article').count(), 1);
+    await inventory.getByLabel('Technology category').selectOption('all');
+    const findingsSearch = page.getByLabel('Search findings, CVEs, versions and evidence');
+    await findingsSearch.fill('does-not-exist');
+    await page.getByText('No findings match this filter.', { exact: true }).waitFor();
+    await findingsSearch.fill('CVE-2026-12345');
+    await page.getByText('listed — known exploitation elsewhere', { exact: false }).waitFor();
+    await findingsSearch.fill('');
+    await page.getByLabel('Finding type').selectOption('exposure');
+    await page.getByText('No findings match this filter.', { exact: true }).waitFor();
+    await page.getByLabel('Finding type').selectOption('advisory');
+    const coverage = page.locator('details').filter({ has: page.locator(':scope > summary').filter({ hasText: /^Coverage and gaps/ }) }).first();
+    assert.equal(await coverage.getAttribute('open'), null);
+    await page.getByText('Open source under MIT for this release.', { exact: false }).waitFor();
     await workspace.getByRole('button', { name: 'Save current assessment', exact: true }).click();
     await workspace.getByLabel('Review state', { exact: true }).waitFor();
     await workspace.getByLabel('Review state', { exact: true }).selectOption('resolved');
@@ -91,7 +110,7 @@ try {
     await workspace.getByText('No saved investigations.', { exact: true }).waitFor();
     assert.equal(await workspace.getByText('Browser QA review note.', { exact: true }).count(), 0);
     assert.deepEqual(errors, []);
-    console.log('Browser smoke passed: sign-in, KEV/grouped findings, real evidence save/review, closure reason, mobile overflow, logout clearing, viewer permissions and tenant isolation. Scan response was a fixture.');
+    console.log('Browser smoke passed: sign-in, technology/version search, CVE and finding-type filters, collapsed coverage, licensing notice, KEV/grouped findings, real evidence save/review, closure reason, mobile overflow, logout clearing, viewer permissions and tenant isolation. Scan response was a fixture.');
 } catch (error) {
     if (page) console.error('Browser state:', (await page.locator('body').innerText()).slice(0, 14000));
     throw error;

@@ -12,7 +12,7 @@ export function factDigest(r: ReconReport) {
         dns: { a: r.dns.a, aaaa: r.dns.aaaa, ns: r.dns.ns, mx: r.dns.mx.map(m => m.exchange), spf: r.dns.emailSecurity.spf, dmarcPolicy: r.dns.emailSecurity.dmarcPolicy, emailFindings: r.dns.emailSecurity.findings, caa: r.dns.caa.length, ptr: r.dns.reverse },
         tls: r.tls.available ? { issuer: r.tls.issuer, protocol: r.tls.protocol, daysRemaining: r.tls.daysRemaining, sanCount: r.tls.sans.length, trusted: r.tls.authorized } : { error: r.tls.error },
         headers: { grade: r.headers.grade, score: r.headers.score, missing: r.headers.findings.filter(f => !f.present).map(f => f.header), weak: r.headers.findings.filter(f => f.present && f.severity === 'low').map(f => `${f.header}: ${f.note}`), disclosure: r.headers.disclosure, insecureCookies: r.headers.cookies.filter(c => !c.secure || !c.httpOnly).map(c => c.name) },
-        tech: r.tech.map(t => `${t.name}${t.version ? ' ' + t.version : ''} [${t.category}]`),
+        tech: r.tech.slice(0, 100).map(t => ({ name: t.name, category: t.category, version: t.version || 'unknown', confidence: t.confidence, evidence: t.evidence, versionEvidence: t.versionEvidence, versionCandidates: t.versionCandidates, unverifiedAssetVersionHints: t.versionHints })),
         contacts: { emails: r.contacts.emails.length, phones: r.contacts.phones.length, socials: r.contacts.socials.map(s => s.platform), addresses: r.contacts.addresses.length },
         surface: { robotsDisallow: r.robots.disallow.slice(0, 20), sitemapUrls: r.sitemap.urlCount, securityTxt: r.securityTxt.found, ctSubdomains: r.ct.subdomains.length, waybackFirstSeen: r.wayback.firstSeen, forms: r.forms.length, passwordForms: r.forms.filter(f => f.hasPassword).length },
         meta: { title: r.meta.title, description: r.meta.description, lang: r.meta.lang, h1: r.meta.headings.h1, wordCount: r.meta.wordCount, og: r.meta.og, jsonLd: r.meta.jsonLdTypes, canonical: r.meta.canonical, robotsMeta: r.meta.robotsMeta },
@@ -27,6 +27,7 @@ export function factDigest(r: ReconReport) {
             limitations: r.assessment.limitations,
             intelligence: r.assessment.intelligence,
             threatIntelligence: r.assessment.threatIntelligence,
+            technologyAdvisories: r.assessment.technologyAdvisories,
             groups: r.assessment.groups,
         } : { limitations: ['Legacy report: structured exposure checks were not performed.'] },
     });

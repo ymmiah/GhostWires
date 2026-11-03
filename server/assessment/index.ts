@@ -6,6 +6,7 @@ import { detectExposures } from './detect';
 import { assessAdvisories } from './advisories';
 import { redactReport } from './redact';
 import { kevClient } from './kev';
+import { technologyAdvisoryClient } from './technologyAdvisories';
 import { groupFindings } from './groups';
 
 export const OWNER_PATHS = ['/.env', '/phpinfo.php', '/phpmyadmin/', '/adminer.php', '/.git/HEAD'] as const;
@@ -21,11 +22,11 @@ export async function assessSurface(page: SafeResponse, tech: TechHit[], mode: A
             'No SQL injection, authentication bypass, password testing, database queries or port scans were performed.',
             'Database services hidden behind the application cannot be assessed from a website URL.',
             'Signatures and version banners may be inaccurate or quoted content; review the evidence.',
-            'This release does not assess database runtime CVEs or WordPress plugin advisories. KEV enrichment applies only to matched CVE IDs.',
+            'This release does not infer hidden database versions or automatically match WordPress plugin advisories. KEV enrichment applies only to matched CVE IDs.',
         ],
         intelligence: { source: 'GitHub-reviewed Composer advisories', status: 'not-requested', detail: 'No package inventory supplied.' },
     };
-    for (const hit of tech) if (!result.components.some(c => c.name === hit.name)) result.components.push({ name: hit.name, version: hit.version, source: `${page.url} — ${hit.evidence}`, confidence: 'medium' });
+    for (const hit of tech) if (!result.components.some(c => c.name === hit.name)) result.components.push({ name: hit.name, version: hit.version, source: `${page.url} — ${hit.evidence}`, confidence: hit.confidence || 'medium' });
     result.coverage.push({ checkId: 'database-services', label: 'Database network access and permissions', status: 'not-assessed', detail: 'Web responses do not establish database port exposure, database authorisation, encryption or runtime patch status.' });
     if (mode === 'owner') {
         for (const path of OWNER_PATHS) {
@@ -56,6 +57,10 @@ export async function assessSurface(page: SafeResponse, tech: TechHit[], mode: A
     result.findings.push(...advisories.findings);
     result.coverage.push(advisories.coverage);
     result.intelligence = advisories.intelligence;
+    const technology = await technologyAdvisoryClient.assess(tech, page.url, now, signal);
+    result.technologyAdvisories = technology.checks;
+    result.findings.push(...technology.findings);
+    result.coverage.push({ checkId: 'technology-advisories', label: 'Technology version and CVE matching', status: technology.checks.some(c => ['partial', 'unavailable'].includes(c.status)) ? 'partial' : technology.checks.some(c => ['matched', 'no-match'].includes(c.status)) ? 'completed' : 'not-assessed', detail: `${technology.checks.filter(c => c.retrievedAt).length} product lookups; ${technology.checks.filter(c => c.status === 'unknown-version').length} unknown versions. Review each technology for its evidence, research link and feed coverage.` });
     await kevClient.enrich(result);
     const weight = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
     result.findings = [...new Map(result.findings.map(f => [f.id, f])).values()].sort((a, b) => Number(b.advisory?.knownExploited === true) - Number(a.advisory?.knownExploited === true) || weight[b.severity] - weight[a.severity] || a.id.localeCompare(b.id));

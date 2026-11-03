@@ -26,7 +26,7 @@ The visitor must opt in before package names and versions are submitted. The ser
 
 The matcher confirms package identity and evaluates stable numeric comparator ranges locally. Unsupported syntax remains unknown and makes coverage partial. Withdrawn and unreviewed advisories are excluded. Failed, rate-limited, malformed, truncated or paginated responses do not become a clean bill of health. Potential matches need owner review of deployment accuracy, backports, configuration and reachability. Version 4.2 optionally enriches already matched CVE IDs with CISA KEV; freshness, absence and failure remain explicit. See [intelligence and workspace](WORKSPACE.md).
 
-PHP/database runtime CVE feeds and WordPress plugin advisory feeds are not included. Detecting those technologies does not imply advisory coverage for them.
+Version 4.3 adds bounded NVD matching for exact, unambiguous observed versions of recognised products, including PHP and WordPress core. It does not infer hidden database versions or automatically match WordPress plugin advisories. Every observed technology has a separate advisory coverage state and an NVD research link. See the v4.3 section in README.md for request limits, caching and evidence rules.
 
 ## Networking and resource boundaries
 
@@ -48,4 +48,4 @@ Run `npm ci`, `npm run typecheck`, `npm test`, `npm run build` and `npm run test
 
 Review the feature branch before merging: the existing Render blueprint automatically redeploys from main. Roll back by reverting the feature commit or deploying the previous container tag. Legacy report consumers remain compatible because `assessment` is optional in the shared report type; existing routes and providers remain available.
 
-Follow-on work: isolated scan workers, a signed local collector for PHP/database inventory, runtime and WordPress advisory feeds with explicit coverage/licensing, scan comparison, shareable HTML/PDF reports and opt-in monitoring. None of those capabilities is represented as implemented by this release. Version 4.2 adds only KEV enrichment, grouping and the optional owner workspace, with no telemetry connectors or autonomous response.
+Follow-on work: isolated scan workers, a signed local collector for PHP/database inventory, database runtime and WordPress plugin advisory feeds with explicit coverage/licensing, scan comparison, shareable HTML/PDF reports and opt-in monitoring. None of those capabilities is represented as implemented by this release. Version 4.2 added KEV enrichment, grouping and the optional owner workspace. Version 4.3 adds technology/version evidence, bounded NVD matching and searchable results, with no telemetry connectors or autonomous response.

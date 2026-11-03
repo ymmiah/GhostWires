@@ -4,7 +4,8 @@ import { normalizeTarget, safeFetch, registrableDomain, politeDelay, TargetError
 import { dnsIntel } from './dnsIntel';
 import { tlsIntel } from './tlsIntel';
 import { auditHeaders } from './headersAudit';
-import { fingerprint } from './fingerprint';
+import { fingerprint, mergeAssetVersions } from './fingerprint';
+import * as cheerio from 'cheerio';
 import { parseHtml } from './htmlIntel';
 import { robotsIntel, robotsAllows, sitemapIntel, securityTxtIntel, ctIntel, waybackIntel } from './surfaceIntel';
 import { assessSurface } from './assessment';
@@ -13,7 +14,7 @@ import { validateInventory } from './assessment/advisories';
 import { redactReport } from './assessment/redact';
 
 export const ENGINE = 'GhostWires Mk.IV';
-export const VERSION = '4.2.0';
+export const VERSION = '4.3.0';
 
 export interface ReconOptions { ct?: boolean; wayback?: boolean; mode?: 'public' | 'owner'; ownershipToken?: unknown; inventory?: unknown; signal?: AbortSignal; }
 
@@ -54,7 +55,23 @@ export async function runRecon(input: string, opts: ReconOptions = {}): Promise<
         waybackIntel(final.hostname, opts.wayback !== false),
     ]);
 
-    const tech = fingerprint(html, page.headers, page.setCookies, parsed.scripts, parsed.meta.generator);
+    let tech = fingerprint(html, page.headers, page.setCookies, parsed.scripts, parsed.meta.generator);
+    // Three explicitly linked same-origin static assets at most; no path guessing or JS execution.
+    const $ = cheerio.load(html);
+    const resources = [...parsed.scripts, ...$('link[rel="stylesheet"][href]').map((_, e) => $(e).attr('href') || '').get()];
+    const linked = [...new Set(resources)].flatMap(src => {
+        try { const u = new URL(src, final); return u.origin === final.origin && !u.username && !u.password && /\.(?:js|css)$/i.test(u.pathname) && robotsAllows(robots, u.pathname) ? [u] : []; } catch { return []; }
+    }).sort((a, b) => Number(/jquery|bootstrap|vue|react|lodash/i.test(b.pathname)) - Number(/jquery|bootstrap|vue|react|lodash/i.test(a.pathname))).slice(0, 3);
+    let assetsRead = 0;
+    if (!robots.error && (!robots.crawlDelay || robots.crawlDelay <= 5) && page.status >= 200 && page.status < 300) for (const asset of linked) {
+        if (opts.signal?.aborted) throw new TargetError('Assessment cancelled.', 499);
+        await politeDelay(asset.host, Math.max(750, (robots.crawlDelay || 0) * 1000));
+        try {
+            const res = await safeFetch(asset, { timeoutMs: 4000, maxBytes: 128 * 1024, maxRedirects: 0, sameOrigin: final.origin, signal: opts.signal });
+            if (res.status === 200 && /javascript|ecmascript|text\/css/i.test(res.headers.get('content-type') || '')) { tech = mergeAssetVersions(tech, res.text, asset.href); assetsRead++; }
+        } catch { /* Asset failures do not cancel the primary report. */ }
+    }
+    notes.push(`Technology evidence: primary response plus ${assetsRead} linked static asset prefixes inspected (maximum 3). Hidden server and database versions remain unknown.`);
     const assessment = await assessSurface(page, tech, mode, robots, inventory, opts.signal);
     return redactReport({
         engine: `${ENGINE} v${VERSION}`,

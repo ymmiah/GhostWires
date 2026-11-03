@@ -79,6 +79,10 @@ export interface TechHit {
     category: string;
     version?: string;
     evidence: string;
+    confidence?: FindingConfidence;
+    versionEvidence?: string;
+    versionCandidates?: string[];
+    versionHints?: string[];
 }
 
 export interface ContactIntel {
@@ -209,6 +213,7 @@ export interface SurfaceAssessment {
     coverage: AssessmentCoverage[];
     limitations: string[];
     intelligence: { source: string; retrievedAt?: string; status: 'not-requested' | 'current' | 'partial' | 'unavailable'; detail: string };
+    technologyAdvisories?: TechnologyAdvisoryCheck[];
     threatIntelligence?: { source: string; status: 'not-requested' | 'current' | 'stale' | 'unavailable'; retrievedAt?: string; catalogVersion?: string; detail: string };
     groups?: { id: string; title: string; reason: string; findingIds: string[] }[];
 }
@@ -280,3 +285,13 @@ export interface ProviderInfo {
 export interface ProvidersResponse { default: AIProviderId | null; byokOnly: boolean; providers: ProviderInfo[]; }
 
 export interface ChatMessage { role: 'user' | 'model'; content: string; }
+
+export interface TechnologyAdvisoryCheck {
+    technology: string;
+    version?: string;
+    status: 'matched' | 'no-match' | 'unknown-version' | 'conflicting-version' | 'unsupported' | 'unavailable' | 'partial';
+    detail: string;
+    searchUrl: string;
+    findingIds: string[];
+    retrievedAt?: string;
+}

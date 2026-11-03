@@ -4,6 +4,7 @@ import { Card } from './Card';
 import { KV, Chip, CopyList, Score, Stat, sevTone } from './ui';
 import { CrawlGraph } from './CrawlGraph';
 import { CopyToClipboard } from './CopyToClipboard';
+import { TechnologyInventory } from './TechnologyInventory';
 import { AssessmentPanel } from './AssessmentPanel';
 
 interface Props {
@@ -192,18 +193,11 @@ export const ResultsDisplay: React.FC<Props> = (p) => {
                 </div>
             )}
 
-            {tab === 'Findings' && <AssessmentPanel assessment={r.assessment} />}
+            {tab === 'Findings' && <AssessmentPanel assessment={r.assessment} tech={r.tech} />}
 
             {tab === 'Tech' && (
                 <Card title={`Technology Fingerprint (${r.tech.length})`} icon={<ChipIcon />}>
-                    {r.tech.length ? (
-                        <table className="w-full text-sm">
-                            <thead><tr className="text-left text-hacker-green text-xs uppercase"><th className="py-1">Technology</th><th>Category</th><th>Version</th><th>Evidence</th></tr></thead>
-                            <tbody>{r.tech.map(t => (
-                                <tr key={t.name} className="border-b border-hacker-green/10"><td className="py-1 text-text-primary font-bold">{t.name}</td><td><Chip tone="blue">{t.category}</Chip></td><td className="text-text-secondary">{t.version || '—'}</td><td className="text-[11px] text-text-secondary break-all">{t.evidence}</td></tr>
-                            ))}</tbody>
-                        </table>
-                    ) : <p className="text-text-secondary text-sm">No signatures matched. The site may be custom-built or render client-side.</p>}
+                    <TechnologyInventory tech={r.tech} checks={r.assessment?.technologyAdvisories} />
                     {r.meta.generator && <KV label="Meta generator" value={r.meta.generator} />}
                     <p className="text-[10px] text-text-secondary mt-2">Deterministic signatures over HTML, script sources, headers and cookies — each hit shows its evidence.</p>
                 </Card>

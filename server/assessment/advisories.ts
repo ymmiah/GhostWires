@@ -48,7 +48,7 @@ const CACHE_TTL = 15 * 60_000;
 
 export async function assessAdvisories(inventory: InventoryPackage[], asset: string, now: string, fetcher = safeFetch): Promise<{ findings: SurfaceFinding[]; coverage: AssessmentCoverage; intelligence: SurfaceAssessment['intelligence'] }> {
     const base = { checkId: 'composer-advisories', label: 'Composer advisory matching' };
-    if (!inventory.length) return { findings: [], coverage: { ...base, status: 'not-assessed', detail: 'No exact Composer package inventory supplied. PHP, WordPress and database runtime CVE matching is not covered by this feed.' }, intelligence: { source: 'GitHub-reviewed Composer advisories', status: 'not-requested', detail: 'Optional; only selected package names and versions are sent to GitHub.' } };
+    if (!inventory.length) return { findings: [], coverage: { ...base, status: 'not-assessed', detail: 'No exact Composer package inventory supplied. Public technology CVE checks are listed separately.' }, intelligence: { source: 'GitHub-reviewed Composer advisories', status: 'not-requested', detail: 'Optional; only selected package names and versions are sent to GitHub.' } };
     const findings: SurfaceFinding[] = [];
     let partial = false;
     let retrieved = Date.now();

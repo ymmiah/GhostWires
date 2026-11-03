@@ -1,7 +1,7 @@
 {
   "name": "ghostwires-mk4",
   "private": true,
-  "version": "4.2.0",
+  "version": "4.3.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -39,5 +39,6 @@
   "author": "Yasin Mohammed Miah, Student of BCU, BSc Computing Top-Up (Hons)",
   "engines": {
     "node": ">=22.16"
-  }
+  },
+  "license": "MIT"
 }
