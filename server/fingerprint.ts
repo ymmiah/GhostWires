@@ -1,4 +1,5 @@
 // GhostWires Mk.IV — deterministic technology fingerprinting from HTML + headers + cookies
+import * as cheerio from 'cheerio';
 import type { TechHit } from '../types';
 
 interface Sig {
@@ -95,8 +96,6 @@ const SIGS: Sig[] = [
 
 export function fingerprint(html: string, headers: Headers, setCookies: string[], scripts: string[], generator: string): TechHit[] {
     const hits = new Map<string, TechHit>();
-    const headerBlob = [...headers.entries()].map(([k, v]) => `${k}: ${v}`).join('\n');
-    const scriptBlob = scripts.join('\n');
     const sample = html.length > 600000 ? html.slice(0, 600000) : html;
 
     for (const s of SIGS) {
@@ -107,14 +106,100 @@ export function fingerprint(html: string, headers: Headers, setCookies: string[]
         if (!evidence && s.script) for (const r of s.script) { const m = scripts.find(x => r.test(x)); if (m) { evidence = `script ${m.slice(0, 80)}`; break; } }
         if (!evidence && s.html) for (const r of s.html) { const m = sample.match(r); if (m) { evidence = `html "${m[0].slice(0, 50)}"`; break; } }
         if (!evidence) continue;
-        let version: string | undefined;
-        if (s.version) {
-            const m = (generator + '\n' + headerBlob + '\n' + scriptBlob + '\n' + sample).match(s.version);
-            if (m?.[1]) version = m[1];
-        }
-        hits.set(s.name, { name: s.name, category: s.category, version, evidence });
+        hits.set(s.name, { name: s.name, category: s.category, evidence, confidence: /^(meta|header|script)/.test(evidence) ? 'high' : 'medium' });
     }
-    if (hits.has('WooCommerce')) hits.delete('Shopify');
+    enrichVersions(hits, sample, headers, scripts, generator);
     if (hits.has('Tailwind CSS') && !/cdn\.tailwindcss\.com|tailwind(\.min)?\.css|--tw-/.test(sample)) hits.delete('Tailwind CSS');
     return [...hits.values()].sort((a, b) => a.category.localeCompare(b.category));
+}
+
+// Versions come from product-specific fields, never unrelated text or a generic ?ver=.
+function enrichVersions(hits: Map<string, TechHit>, html: string, headers: Headers, scripts: string[], generator: string) {
+    const $ = cheerio.load(html);
+    const resources = [...scripts, ...$('script[src]').map((_, e) => $(e).attr('src') || '').get(), ...$('link[href]').map((_, e) => $(e).attr('href') || '').get()];
+    const candidates = new Map<string, { version: string; source: string }[]>();
+    const record = (name: string, category: string, version: string | undefined, source: string) => {
+        if (!hits.has(name)) hits.set(name, { name, category, evidence: source, confidence: 'medium' });
+        if (!version || !/^\d{1,9}\.\d{1,9}(?:\.\d{1,9})?$/.test(version)) return;
+        const list = candidates.get(name) || [];
+        list.push({ version, source }); candidates.set(name, list);
+    };
+    const metaProducts: [string, string][] = [['WordPress', 'CMS'], ['Drupal', 'CMS'], ['Joomla', 'CMS'], ['Ghost', 'CMS'], ['Astro', 'JS framework'], ['WooCommerce', 'E-commerce']];
+    for (const [name, category] of metaProducts) {
+        const m = generator.match(new RegExp('^' + name + '[ /]+(\\d+\\.\\d+(?:\\.\\d+)?)(?:$|[ ;])', 'i'));
+        if (m) record(name, category, m[1], `meta generator: ${generator.slice(0, 160)}`);
+    }
+    const headerProducts: [string, string, string, RegExp][] = [
+        ['PHP', 'Language', 'x-powered-by', /\bPHP\/(\d+\.\d+\.\d+)(?=$|[ ;,])/i],
+        ['Apache', 'Web server', 'server', /\bApache\/(\d+\.\d+\.\d+)(?=$|[ ;(])/i],
+        ['Nginx', 'Web server', 'server', /\bnginx\/(\d+\.\d+\.\d+)(?=$|[ ;(])/i],
+        ['Microsoft IIS', 'Web server', 'server', /\bIIS\/(\d+\.\d+)(?=$|[ ;(])/i],
+        ['Drupal', 'CMS', 'x-generator', /^Drupal (\d+\.\d+(?:\.\d+)?)/i],
+        ['ASP.NET', 'Framework', 'x-aspnet-version', /^(\d+\.\d+(?:\.\d+)?)/],
+    ];
+    for (const [name, category, header, re] of headerProducts) {
+        const value = headers.get(header) || ''; const m = value.match(re);
+        if (m) record(name, category, m[1], `header ${header}: ${value.slice(0, 160)}`);
+    }
+    const angular = $('[ng-version]').first().attr('ng-version');
+    if (angular) record('Angular', 'JS framework', angular, `ng-version attribute: ${angular}`);
+    for (const resource of resources.slice(0, 500)) {
+        let u: URL; try { u = new URL(resource, 'https://relative.invalid'); } catch { continue; }
+        const path = u.pathname;
+        const products: [string, string, RegExp][] = [
+            ['jQuery', 'JS library', /(?:^|\/)jquery(?:@|[-/])(\d+\.\d+\.\d+)(?!\.\d|-[a-z0-9])(?=[/.]|$)/i],
+            ['Bootstrap', 'UI framework', /(?:^|\/)bootstrap(?:@|[-/])(\d+\.\d+\.\d+)(?!\.\d|-[a-z0-9])(?=[/.]|$)/i],
+            ['Vue.js', 'JS framework', /(?:^|\/)vue(?:@|[-/])(\d+\.\d+\.\d+)(?!\.\d|-[a-z0-9])(?=[/.]|$)/i],
+            ['React', 'JS library', /(?:^|\/)react(?:-dom)?(?:@|[-/])(\d+\.\d+\.\d+)(?!\.\d|-[a-z0-9])(?=[/.]|$)/i],
+            ['Lodash', 'JS library', /(?:^|\/)lodash(?:@|[-/])(\d+\.\d+\.\d+)(?!\.\d|-[a-z0-9])(?=[/.]|$)/i],
+        ];
+        for (const [name, category, re] of products) {
+            const m = path.match(re);
+            if (m) record(name, category, m[1], `asset URL: ${resource.slice(0, 240)}`);
+        }
+        // WordPress asset query values describe that asset, not WordPress core.
+        const wp = path.match(/\/wp-content\/(plugins|themes)\/([a-z0-9_-]{1,80})\//i);
+        if (wp) {
+            const name = `WordPress ${wp[1] === 'plugins' ? 'plugin' : 'theme'}: ${wp[2]}`;
+            record(name, wp[1] === 'plugins' ? 'WordPress plugin' : 'WordPress theme', undefined, `asset path: ${path.slice(0, 200)}`);
+            const hint = u.searchParams.get('ver') || u.searchParams.get('version');
+            if (hint && /^\d{1,9}\.\d{1,9}(?:\.\d{1,9})?$/.test(hint)) {
+                const hit = hits.get(name)!;
+                hit.versionHints = [...new Set([...(hit.versionHints || []), hint])].slice(0, 5);
+            }
+        }
+        if (/\/(?:jquery|bootstrap)(?:\.bundle)?(?:\.min)?\.(?:js|css)$/i.test(path)) {
+            const name = /jquery/i.test(path) ? 'jQuery' : 'Bootstrap';
+            const version = u.searchParams.get('ver') || u.searchParams.get('version');
+            if (version) record(name, name === 'jQuery' ? 'JS library' : 'UI framework', version, `asset version parameter (publisher claim): ${resource.slice(0, 240)}`);
+        }
+    }
+    for (const [name, rows] of candidates) {
+        const hit = hits.get(name)!; const versions = [...new Set(rows.map(r => r.version))];
+        hit.versionCandidates = versions; hit.versionEvidence = rows.map(r => `${r.version} — ${r.source}`).join(' | ').slice(0, 1500);
+        hit.version = versions.length === 1 ? versions[0] : undefined;
+        if (versions.length > 1) hit.confidence = 'low';
+    }
+}
+
+/** Inspect only linked static assets. Never execute downloaded JavaScript. */
+export function mergeAssetVersions(hits: TechHit[], text: string, source: string): TechHit[] {
+    const signatures: [string, string, RegExp][] = [
+        ['jQuery', 'JS library', /(?:jQuery JavaScript Library v|jQuery v)(\d+\.\d+\.\d+)(?![\d.]|-[a-z0-9])/i],
+        ['Bootstrap', 'UI framework', /Bootstrap v(\d+\.\d+\.\d+)(?![\d.]|-[a-z0-9])/i],
+        ['Vue.js', 'JS framework', /Vue\.js v(\d+\.\d+\.\d+)(?![\d.]|-[a-z0-9])/i],
+        ['React', 'JS library', /@license React v(\d+\.\d+\.\d+)(?![\d.]|-[a-z0-9])/i],
+        ['Lodash', 'JS library', /Lodash <https:\/\/lodash\.com\/>[\s\S]{0,120}?VERSION = ['"](\d+\.\d+\.\d+)['"]/],
+    ];
+    const result = hits.map(h => ({ ...h }));
+    for (const [name, category, re] of signatures) {
+        const m = text.slice(0, 128 * 1024).match(re); if (!m) continue;
+        let hit = result.find(h => h.name === name);
+        if (!hit) { hit = { name, category, evidence: `linked asset: ${source}`, confidence: 'medium' }; result.push(hit); }
+        const versions = [...new Set([...(hit.versionCandidates || (hit.version ? [hit.version] : [])), m[1]])];
+        hit.versionCandidates = versions; hit.version = versions.length === 1 ? versions[0] : undefined;
+        hit.versionEvidence = [hit.versionEvidence, `asset banner: ${m[0].slice(0, 160)} — ${source}`].filter(Boolean).join(' | ').slice(0, 1500);
+        if (versions.length > 1) hit.confidence = 'low';
+    }
+    return result;
 }

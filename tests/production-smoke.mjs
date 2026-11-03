@@ -1,7 +1,7 @@
 // Run after npm run build. Uses only the built server and local HTTP requests.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -23,7 +23,7 @@ try {
     }
     assert.ok(health, log);
     const data = await health.json();
-    assert.equal(data.version, '4.2.0'); assert.equal(data.byokOnly, true);
+    assert.equal(data.version, JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version); assert.equal(data.byokOnly, true);
     const workspace = await fetch(`${base}/api/workspace/session`);
     assert.equal((await workspace.json()).enabled, false);
     for (const [body, status] of [

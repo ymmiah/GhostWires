@@ -254,6 +254,7 @@ const App: React.FC = () => {
             }} />
             <footer className="w-full text-center py-3 border-t border-hacker-green/30 bg-hacker-dark text-xs text-text-secondary">
                 <p>GhostWires Mk.IV // Passive OSINT Reconnaissance Protocol — authorised targets only</p>
+                <p className="mt-1">v4.3.0 · Open source under MIT for this release. Future releases may use different terms. <a className="text-cyber-blue underline" href="https://github.com/ymmiah/GhostWires/blob/main/LICENSING.md" target="_blank" rel="noopener noreferrer">Release licensing policy</a></p>
                 <p className="mt-0.5">Built by Yasin Mohammed Miah, Student of BCU, BSc Computing Top-Up (Hons)</p>
             </footer>
         </div>

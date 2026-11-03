@@ -24,6 +24,7 @@
       z-index: 9999;
       background-size: 100% 2px, 3px 100%;
       pointer-events: none;
+      opacity: 0.12;
     }
     .text-shadow-glow-green {
       text-shadow: 0 0 5px rgba(0, 255, 65, 0.7), 0 0 10px rgba(0, 255, 65, 0.4);

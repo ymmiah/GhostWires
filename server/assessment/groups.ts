@@ -7,7 +7,7 @@ export function groupFindings(scope: string, findings: SurfaceFinding[]): NonNul
     for (const f of findings) {
         if (new URL(f.asset).origin !== scope) continue;
         const category = f.advisory ? 'dependencies' : /^(database-|environment-|php-source)/.test(f.checkId) ? 'data-exposure' : /^php-/.test(f.checkId) || f.checkId === 'phpinfo' ? 'php' : 'management';
-        const titles = { dependencies: 'Dependency advisories', 'data-exposure': 'Database and configuration exposure', php: 'PHP runtime and diagnostics', management: 'Public management surface' };
+        const titles = { dependencies: 'Technology and dependency advisories', 'data-exposure': 'Database and configuration exposure', php: 'PHP runtime and diagnostics', management: 'Public management surface' };
         const group = groups.get(category) || { title: titles[category], reason: 'Findings share this origin and a related technical surface. No exploit chain or compromise is established.', findingIds: [] };
         group.findingIds.push(f.id); groups.set(category, group);
     }
