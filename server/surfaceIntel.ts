@@ -1,7 +1,7 @@
 // GhostWires Mk.IV — attack-surface discovery from PUBLIC sources only:
 // robots.txt, sitemap.xml, security.txt, Certificate Transparency (crt.sh), Wayback Machine CDX.
 import type { RobotsIntel, SitemapIntel, SecurityTxt, CTIntel, WaybackIntel } from '../types';
-import { safeFetch, fetchPublicJson, politeDelay } from './net';
+import { safeFetch, fetchPublicJson, politeDelay, type SafeFetchOptions } from './net';
 
 const cache = new Map<string, { at: number; value: any }>();
 async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
@@ -48,21 +48,22 @@ export function robotsAllows(robots: RobotsIntel, path: string): boolean {
     return longest(robots.allow) >= longest(robots.disallow);
 }
 
-export async function robotsIntel(origin: string): Promise<RobotsIntel> {
-    return cached(`robots:${origin}`, 10 * 60_000, async () => {
+export async function robotsIntel(origin: string, policy: Pick<SafeFetchOptions, 'sameOrigin' | 'signal'> = {}): Promise<RobotsIntel> {
+    return cached(`robots:${origin}:${policy.sameOrigin || ''}`, 10 * 60_000, async () => {
         try {
-            const res = await safeFetch(`${origin}/robots.txt`, { timeoutMs: 8000, maxBytes: 512 * 1024, accept: 'text/plain' });
+            const res = await safeFetch(`${origin}/robots.txt`, { timeoutMs: 8000, maxBytes: 512 * 1024, accept: 'text/plain', ...policy });
+            if (res.truncated || [401, 403, 429].includes(res.status) || res.status >= 500) return { found: false, disallow: [], allow: [], sitemaps: [], error: 'Robots policy unavailable or incomplete.' };
             if (res.status !== 200 || /<html/i.test(res.text.slice(0, 500))) return { found: false, disallow: [], allow: [], sitemaps: [] };
             return parseRobots(res.text, 'GhostWires');
-        } catch { return { found: false, disallow: [], allow: [], sitemaps: [] }; }
+        } catch { return { found: false, disallow: [], allow: [], sitemaps: [], error: 'Robots request failed.' }; }
     });
 }
 
-export async function sitemapIntel(origin: string, robots: RobotsIntel): Promise<SitemapIntel> {
+export async function sitemapIntel(origin: string, robots: RobotsIntel, policy: Pick<SafeFetchOptions, 'sameOrigin' | 'signal'> = {}): Promise<SitemapIntel> {
     const candidates = [...robots.sitemaps, `${origin}/sitemap.xml`, `${origin}/sitemap_index.xml`];
     for (const src of [...new Set(candidates)].slice(0, 4)) {
         try {
-            const res = await safeFetch(src, { timeoutMs: 10000, maxBytes: 5 * 1024 * 1024, accept: 'application/xml,text/xml' });
+            const res = await safeFetch(src, { timeoutMs: 10000, maxBytes: 5 * 1024 * 1024, accept: 'application/xml,text/xml', ...policy });
             if (res.status !== 200 || !/<(urlset|sitemapindex)/i.test(res.text)) continue;
             const locs = [...res.text.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\]]+?)\s*(?:\]\]>)?\s*<\/loc>/gi)].map(m => m[1]);
             const isIndex = /<sitemapindex/i.test(res.text);
@@ -75,10 +76,10 @@ export async function sitemapIntel(origin: string, robots: RobotsIntel): Promise
     return { found: false, urlCount: 0, sample: [], nestedSitemaps: [] };
 }
 
-export async function securityTxtIntel(origin: string): Promise<SecurityTxt> {
+export async function securityTxtIntel(origin: string, policy: Pick<SafeFetchOptions, 'sameOrigin' | 'signal'> = {}): Promise<SecurityTxt> {
     for (const path of ['/.well-known/security.txt', '/security.txt']) {
         try {
-            const res = await safeFetch(origin + path, { timeoutMs: 8000, maxBytes: 64 * 1024, accept: 'text/plain' });
+            const res = await safeFetch(origin + path, { timeoutMs: 8000, maxBytes: 64 * 1024, accept: 'text/plain', ...policy });
             if (res.status !== 200 || !/contact\s*:/i.test(res.text) || /<html/i.test(res.text.slice(0, 300))) continue;
             const field = (f: string) => [...res.text.matchAll(new RegExp(`^${f}\\s*:\\s*(.+)$`, 'gim'))].map(m => m[1].trim());
             return { found: true, url: origin + path, contact: field('Contact'), policy: field('Policy'), expires: field('Expires')[0] };

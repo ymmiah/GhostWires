@@ -117,6 +117,7 @@ export interface RobotsIntel {
     sitemaps: string[];
     crawlDelay?: number;
     raw?: string;
+    error?: string;
 }
 
 export interface SitemapIntel {
@@ -163,6 +164,79 @@ export interface ReconReport {
     ct: CTIntel;
     wayback: WaybackIntel;
     notes: string[];
+    assessment?: SurfaceAssessment; // optional for backwards-compatible report imports
+    workspaceReceipt?: string; // short-lived, session-bound permission to save an owner assessment
+}
+
+export type AssessmentMode = 'public' | 'owner';
+export type FindingConfidence = 'high' | 'medium' | 'low';
+export interface SurfaceFinding {
+    id: string;
+    checkId: string;
+    title: string;
+    severity: Severity;
+    confidence: FindingConfidence;
+    status: 'observed-exposure' | 'potential-vulnerability';
+    asset: string;
+    observedAt: string;
+    evidence: string[];
+    impact: string;
+    remediation: string;
+    verification: string;
+    limitations: string[];
+    references: string[];
+    advisory?: { id: string; cve?: string; affectedRange: string; fixedVersion?: string; knownExploited: boolean | null; kev?: { dateAdded: string; requiredAction: string; ransomwareUse: string } };
+}
+export interface AssessmentCoverage {
+    checkId: string;
+    label: string;
+    status: 'completed' | 'partial' | 'not-assessed' | 'blocked' | 'error';
+    detail: string;
+}
+export interface ObservedComponent {
+    name: string;
+    version?: string;
+    source: string;
+    confidence: FindingConfidence;
+}
+export interface SurfaceAssessment {
+    schemaVersion: '1.0';
+    mode: AssessmentMode;
+    generatedAt: string;
+    scope: string;
+    findings: SurfaceFinding[];
+    components: ObservedComponent[];
+    coverage: AssessmentCoverage[];
+    limitations: string[];
+    intelligence: { source: string; retrievedAt?: string; status: 'not-requested' | 'current' | 'partial' | 'unavailable'; detail: string };
+    threatIntelligence?: { source: string; status: 'not-requested' | 'current' | 'stale' | 'unavailable'; retrievedAt?: string; catalogVersion?: string; detail: string };
+    groups?: { id: string; title: string; reason: string; findingIds: string[] }[];
+}
+export interface OwnershipChallenge {
+    origin: string;
+    recordName: string;
+    recordValue: string;
+    token: string;
+    expiresAt: string;
+}
+export interface InventoryPackage { name: string; version: string; }
+
+export type WorkspaceRole = 'owner' | 'analyst' | 'viewer';
+export type ReviewState = 'open' | 'in-review' | 'resolved' | 'accepted-risk';
+export interface WorkspaceSession {
+    enabled: boolean;
+    user?: { email: string; role: WorkspaceRole; workspace: string };
+    csrfToken?: string;
+    retentionDays?: number;
+}
+export interface InvestigationSummary {
+    id: string; scope: string; title: string; state: ReviewState;
+    createdAt: string; updatedAt: string; expiresAt: string; findingCount: number; kevCount: number;
+    version: number;
+}
+export interface Investigation extends InvestigationSummary {
+    assessment: SurfaceAssessment;
+    timeline: { sequence: number; at: string; actor: string; action: 'saved' | 'reviewed' | 'note'; detail: string }[];
 }
 
 export interface CrawlPage {
@@ -192,6 +266,7 @@ export interface AIAnalysis {
     a11yNarrative: string;
     securityNarrative: string;
     recommendations: string[];
+    findingGuidance?: { findingId: string; explanation: string; recommendation: string }[];
 }
 
 export interface ProviderInfo {

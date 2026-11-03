@@ -4,6 +4,7 @@ import { Card } from './Card';
 import { KV, Chip, CopyList, Score, Stat, sevTone } from './ui';
 import { CrawlGraph } from './CrawlGraph';
 import { CopyToClipboard } from './CopyToClipboard';
+import { AssessmentPanel } from './AssessmentPanel';
 
 interface Props {
     report: ReconReport;
@@ -21,7 +22,7 @@ interface Props {
     onNewScan: () => void;
 }
 
-const TABS = ['Overview', 'Network', 'Headers', 'Tech', 'Contacts', 'Surface', 'Content', 'Crawl', 'AI Intel'] as const;
+const TABS = ['Overview', 'Findings', 'Network', 'Headers', 'Tech', 'Contacts', 'Surface', 'Content', 'Crawl', 'AI Intel'] as const;
 type Tab = typeof TABS[number];
 
 const btn = 'flex items-center gap-1 text-xs bg-hacker-dark hover:bg-hacker-dark-2 text-hacker-green font-bold py-1 px-3 border border-hacker-green/50 transition-all hover:text-cyber-blue hover:border-cyber-blue rounded-sm disabled:opacity-40 disabled:cursor-not-allowed';
@@ -104,6 +105,7 @@ export const ResultsDisplay: React.FC<Props> = (p) => {
                         </Card>
                     </div>
                     <Card title="Top findings" icon={<ShieldIcon />}>
+                        {r.assessment && <div className="mb-3 text-xs text-text-primary"><strong className="text-cyber-blue">{r.assessment.findings.length} structured exposure/advisory findings.</strong> <button className="underline text-cyber-blue" onClick={() => setTab('Findings')}>Review evidence and coverage</button><p className="mt-1 text-text-secondary">Header observations below are hygiene indicators, not proof of an exploitable vulnerability.</p></div>}
                         <ul className="text-sm space-y-1">
                             {missingHeaders.filter(f => f.severity === 'high').map(f => <li key={f.header}><Chip tone="red">high</Chip> Missing <code>{f.header}</code> — {f.note}</li>)}
                             {r.dns.emailSecurity.findings.map(f => <li key={f}><Chip tone="yellow">email</Chip> {f}</li>)}
@@ -189,6 +191,8 @@ export const ResultsDisplay: React.FC<Props> = (p) => {
                     </div>
                 </div>
             )}
+
+            {tab === 'Findings' && <AssessmentPanel assessment={r.assessment} />}
 
             {tab === 'Tech' && (
                 <Card title={`Technology Fingerprint (${r.tech.length})`} icon={<ChipIcon />}>
@@ -356,6 +360,7 @@ export const ResultsDisplay: React.FC<Props> = (p) => {
                                 <div className="flex flex-wrap gap-1 mt-1">{p.analysis.entities.map(t => <Chip key={t}>{t}</Chip>)}</div>
                             </Card>
                             <Card title="Security Narrative" icon={<ShieldIcon />}><p className="text-sm text-text-primary">{p.analysis.securityNarrative}</p></Card>
+                            {!!p.analysis.findingGuidance?.length && <Card title="Evidence-linked AI guidance" icon={<BrainIcon />}><p className="text-xs text-text-secondary mb-3">AI interpretation; verify against the deterministic finding. This does not change its status or confidence.</p>{p.analysis.findingGuidance.map(g => <div key={g.findingId} className="border-t border-hacker-green/20 pt-2 mt-2 text-sm text-text-primary"><p className="text-xs text-cyber-blue break-all">{g.findingId}</p><p className="mt-1">{g.explanation}</p><p className="mt-1">{g.recommendation}</p></div>)}</Card>}
                             <Card title="SEO & Accessibility Narrative" icon={<UserIcon />}><p className="text-sm text-text-primary">{p.analysis.seoNarrative}</p><p className="text-sm text-text-primary mt-2">{p.analysis.a11yNarrative}</p></Card>
                             <div className="lg:col-span-2"><Card title="Prioritised Defensive Recommendations" icon={<ShieldIcon />}>
                                 <ol className="list-decimal list-inside text-sm text-text-primary space-y-1">{p.analysis.recommendations.map(x => <li key={x}>{x}</li>)}</ol>

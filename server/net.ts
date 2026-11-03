@@ -1,6 +1,9 @@
 // GhostWires Mk.IV — hardened outbound networking (SSRF guard + bounded fetch)
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import http from 'node:http';
+import https from 'node:https';
+import { createGunzip, createInflate, createBrotliDecompress } from 'node:zlib';
 import type { RedirectHop } from '../types';
 
 export const USER_AGENT =
@@ -24,7 +27,7 @@ const v6Block = new net.BlockList();
 // Do NOT add ::ffff:0:0/96 here — that is the entire IPv4 space; handle mapped below.
 [
     ['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
-    ['2001:db8::', 32], ['100::', 64],
+    ['2001:db8::', 32], ['100::', 64], ['2001::', 23], ['2002::', 16], ['3fff::', 20],
 ].forEach(([a, p]) => v6Block.addSubnet(a as string, p as number, 'ipv6'));
 
 // Some VPN/TUN proxies (e.g. Clash "fake-ip" mode) answer DNS with 198.18.0.0/15.
@@ -59,6 +62,7 @@ function embeddedIPv4(ip: string): string | null {
 }
 
 export function isBlockedIP(ip: string): boolean {
+    if (net.isIP(ip) === 6) ip = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
     const family = net.isIP(ip);
     if (family === 4) {
         if (allowFakeIP() && fakeIPRange.check(ip, 'ipv4')) return false;
@@ -73,6 +77,9 @@ export function isBlockedIP(ip: string): boolean {
         // Unparsed NAT64 → block (avoid treating the whole prefix as public)
         const lower = ip.toLowerCase();
         if (lower === '64:ff9b::' || lower.startsWith('64:ff9b:')) return true;
+        // Permit conventional global unicast only; block transition mechanisms
+        // which can encode an unchecked IPv4 destination (Teredo, 6to4, NAT64).
+        if (!/^[23][0-9a-f]{3}:/.test(lower)) return true;
         return v6Block.check(lower, 'ipv6');
     }
     return true;
@@ -95,6 +102,7 @@ export function normalizeTarget(input: string): URL {
     if (u.username || u.password) throw new TargetError('Credentials in URLs are not allowed.');
     if (u.port && !['80', '443', '8080', '8443'].includes(u.port)) throw new TargetError('Non-standard ports are blocked.');
     u.hash = '';
+    if (BLOCKED_HOSTNAMES.some(r => r.test(u.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '')))) throw new TargetError('Internal hostnames are blocked.', 403);
     return u;
 }
 
@@ -108,7 +116,10 @@ export async function assertPublicHost(hostname: string): Promise<string[]> {
     }
     let addrs: { address: string }[];
     try {
-        addrs = await dns.lookup(host, { all: true, verbatim: true });
+        let timer: ReturnType<typeof setTimeout>;
+        try {
+            addrs = await Promise.race([dns.lookup(host, { all: true, verbatim: true }), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('DNS timeout')), 5000); })]);
+        } finally { clearTimeout(timer!); }
     } catch {
         throw new TargetError(`DNS resolution failed for ${host}`, 502);
     }
@@ -128,6 +139,7 @@ export interface SafeResponse {
     redirectChain: RedirectHop[];
     resolvedIPs: string[];
     timeMs: number;
+    truncated?: boolean;
 }
 
 export interface SafeFetchOptions {
@@ -136,6 +148,61 @@ export interface SafeFetchOptions {
     maxRedirects?: number;
     accept?: string;
     method?: 'GET' | 'HEAD';
+    sameOrigin?: string;
+    signal?: AbortSignal;
+}
+
+/** The socket resolver can return only addresses already checked by assertPublicHost. */
+export function pinnedLookup(addresses: string[]) {
+    return (_host: string, options: any, callback: (...args: any[]) => void) => {
+        const family = typeof options === 'number' ? options : options?.family;
+        const candidates = addresses.filter(ip => !isBlockedIP(ip) && (!family || net.isIP(ip) === family));
+        if (!candidates.length) return callback(new TargetError('No validated address available.', 403));
+        if (options?.all) return callback(null, candidates.map(address => ({ address, family: net.isIP(address) })));
+        callback(null, candidates[0], net.isIP(candidates[0]));
+    };
+}
+
+async function requestHop(url: URL, addresses: string[], opts: SafeFetchOptions, signal: AbortSignal): Promise<SafeResponse> {
+    const started = Date.now();
+    return new Promise((resolve, reject) => {
+        const transport = url.protocol === 'https:' ? https : http;
+        const req = transport.request(url, {
+            method: opts.method || 'GET', agent: false, signal,
+            lookup: pinnedLookup(addresses),
+            headers: { 'User-Agent': USER_AGENT, Accept: opts.accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'en-GB,en;q=0.9', 'Accept-Encoding': 'gzip, deflate, br' },
+        }, res => {
+            const headers = new Headers();
+            for (const [name, value] of Object.entries(res.headers)) for (const v of Array.isArray(value) ? value : value === undefined ? [] : [value]) headers.append(name, v);
+            const result = (body: Buffer, truncated = false): SafeResponse => ({ url: url.href, status: res.statusCode || 0, headers, setCookies: res.headers['set-cookie'] || [], body, text: body.toString('utf8'), redirectChain: [], resolvedIPs: addresses, timeMs: Date.now() - started, truncated });
+            if ((res.statusCode! >= 300 && res.statusCode! < 400 && headers.has('location')) || opts.method === 'HEAD') { res.destroy(); resolve(result(Buffer.alloc(0))); return; }
+            const encoding = res.headers['content-encoding'];
+            const decoder = encoding === 'gzip' ? createGunzip() : encoding === 'deflate' ? createInflate() : encoding === 'br' ? createBrotliDecompress() : undefined;
+            if (encoding && encoding !== 'identity' && !decoder) { res.destroy(); reject(new TargetError('Unsupported response encoding.', 502)); return; }
+            const stream = decoder ? res.pipe(decoder) : res;
+            const chunks: Buffer[] = [];
+            const cap = opts.maxBytes ?? 3 * 1024 * 1024;
+            let total = 0, compressed = 0, settled = false;
+            const finish = (truncated: boolean) => {
+                if (settled) return;
+                settled = true;
+                resolve(result(Buffer.concat(chunks), truncated));
+                if (truncated) { stream.destroy(); res.destroy(); req.destroy(); }
+            };
+            res.on('data', chunk => { compressed += chunk.length; if (compressed > cap * 2) finish(true); });
+            stream.on('data', (chunk: Buffer) => {
+                if (settled) return;
+                const remaining = cap - total;
+                chunks.push(chunk.subarray(0, remaining)); total += Math.min(chunk.length, remaining);
+                if (chunk.length > remaining) finish(true);
+            });
+            stream.on('end', () => finish(false));
+            const fail = () => { if (!settled) { settled = true; stream.destroy(); res.destroy(); reject(new TargetError('Response interrupted before completion.', 502)); } };
+            stream.on('error', fail); res.on('error', fail); res.on('aborted', fail);
+        });
+        req.on('error', error => reject(error));
+        req.end();
+    });
 }
 
 /**
@@ -143,71 +210,40 @@ export interface SafeFetchOptions {
  * timeout, and a hard response-size cap.
  */
 export async function safeFetch(target: string | URL, opts: SafeFetchOptions = {}): Promise<SafeResponse> {
-    const { timeoutMs = 15000, maxBytes = 3 * 1024 * 1024, maxRedirects = 5, accept, method = 'GET' } = opts;
-    let current = typeof target === 'string' ? normalizeTarget(target) : target;
+    const { timeoutMs = 15000, maxRedirects = 5 } = opts;
+    let current = normalizeTarget(typeof target === 'string' ? target : target.href);
     const chain: RedirectHop[] = [];
     const started = Date.now();
-    let resolvedIPs: string[] = [];
-
-    for (let hop = 0; hop <= maxRedirects; hop++) {
-        resolvedIPs = await assertPublicHost(current.hostname);
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-        let res: Response;
-        try {
-            res = await fetch(current, {
-                method,
-                redirect: 'manual',
-                signal: controller.signal,
-                headers: {
-                    'User-Agent': USER_AGENT,
-                    Accept: accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-GB,en;q=0.9',
-                },
-            });
-        } catch (e: any) {
-            clearTimeout(timer);
-            if (e?.name === 'AbortError') throw new TargetError(`Timed out after ${timeoutMs / 1000}s fetching ${current.href}`, 504);
-            throw new TargetError(`Fetch failed for ${current.href}: ${e?.cause?.code || e?.message || 'network error'}`, 502);
-        }
-
-        if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-            clearTimeout(timer);
-            chain.push({ url: current.href, status: res.status });
-            const next = new URL(res.headers.get('location')!, current);
-            current = normalizeTarget(next.href);
-            continue;
-        }
-
-        // Stream body with size cap
-        const chunks: Buffer[] = [];
-        let total = 0;
-        try {
-            if (res.body && method === 'GET') {
-                const reader = res.body.getReader();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    total += value.byteLength;
-                    if (total > maxBytes) { controller.abort(); break; }
-                    chunks.push(Buffer.from(value));
-                }
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    opts.signal?.addEventListener('abort', cancel, { once: true });
+    if (opts.signal?.aborted) controller.abort();
+    const timer = setTimeout(cancel, timeoutMs);
+    try {
+        for (let hop = 0; hop <= maxRedirects; hop++) {
+            if (controller.signal.aborted) throw new TargetError('Request cancelled or timed out.', 504);
+            if (opts.sameOrigin && current.origin !== opts.sameOrigin) throw new TargetError('Redirect left the approved origin.', 403);
+            const addresses = await assertPublicHost(current.hostname);
+            const res = await requestHop(current, addresses, opts, controller.signal);
+            if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
+                chain.push({ url: current.href, status: res.status });
+                current = normalizeTarget(new URL(res.headers.get('location')!, current).href);
+                continue;
             }
-        } catch { /* truncated */ } finally { clearTimeout(timer); }
-        const body = Buffer.concat(chunks);
-        const setCookies = typeof (res.headers as any).getSetCookie === 'function' ? (res.headers as any).getSetCookie() : [];
-        return {
-            url: current.href, status: res.status, headers: res.headers, setCookies, body,
-            text: body.toString('utf8'), redirectChain: chain, resolvedIPs, timeMs: Date.now() - started,
-        };
-    }
-    throw new TargetError(`Too many redirects (>${maxRedirects})`, 508);
+            return { ...res, redirectChain: chain, timeMs: Date.now() - started };
+        }
+        throw new TargetError(`Too many redirects (>${maxRedirects})`, 508);
+    } catch (error: any) {
+        if (controller.signal.aborted) throw new TargetError('Request cancelled or timed out.', 504);
+        if (error instanceof TargetError) throw error;
+        throw new TargetError(`Fetch failed: ${error?.code || 'network error'}`, 502);
+    } finally { clearTimeout(timer); opts.signal?.removeEventListener('abort', cancel); }
 }
 
 /** Fetch a JSON document from a fixed public API (crt.sh, archive.org …). */
 export async function fetchPublicJson<T = any>(url: string, timeoutMs = 15000): Promise<T> {
     const res = await safeFetch(url, { timeoutMs, accept: 'application/json', maxBytes: 8 * 1024 * 1024 });
-    if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+    if (res.status !== 200 || res.truncated) throw new Error(`HTTP ${res.status} or incomplete JSON response`);
     return JSON.parse(res.text) as T;
 }
 
@@ -215,9 +251,11 @@ export async function fetchPublicJson<T = any>(url: string, timeoutMs = 15000): 
 const lastHit = new Map<string, number>();
 export async function politeDelay(host: string, minGapMs = 600) {
     const now = Date.now();
-    const wait = (lastHit.get(host) || 0) + minGapMs - now;
+    if (lastHit.size > 1000) for (const [key, at] of lastHit) if (at < now - 60_000) lastHit.delete(key);
+    const at = Math.max(now, (lastHit.get(host) || 0) + minGapMs);
+    lastHit.set(host, at);
+    const wait = at - now;
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
-    lastHit.set(host, Date.now());
 }
 
 export function registrableDomain(hostname: string): string {

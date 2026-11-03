@@ -7,43 +7,56 @@ import { auditHeaders } from './headersAudit';
 import { fingerprint } from './fingerprint';
 import { parseHtml } from './htmlIntel';
 import { robotsIntel, robotsAllows, sitemapIntel, securityTxtIntel, ctIntel, waybackIntel } from './surfaceIntel';
+import { assessSurface } from './assessment';
+import { verifyOwnership } from './assessment/ownership';
+import { validateInventory } from './assessment/advisories';
+import { redactReport } from './assessment/redact';
 
 export const ENGINE = 'GhostWires Mk.IV';
-export const VERSION = '4.0.0';
+export const VERSION = '4.2.0';
 
-export interface ReconOptions { ct?: boolean; wayback?: boolean; }
+export interface ReconOptions { ct?: boolean; wayback?: boolean; mode?: 'public' | 'owner'; ownershipToken?: unknown; inventory?: unknown; signal?: AbortSignal; }
 
 export async function runRecon(input: string, opts: ReconOptions = {}): Promise<ReconReport> {
     const started = Date.now();
     const url = normalizeTarget(input);
+    if (opts.mode && !['public', 'owner'].includes(opts.mode)) throw new TargetError('Invalid assessment mode.');
+    const mode = opts.mode || 'public';
+    const inventory = validateInventory(opts.inventory);
+    if (inventory.length && mode !== 'owner') throw new TargetError('Package inventory assessment requires verified-owner mode.', 403);
+    if (mode === 'owner') await verifyOwnership(input, opts.ownershipToken);
     const notes: string[] = [];
 
     // Robots first, so we can honour it for the primary page too.
-    const robots = await robotsIntel(url.origin);
+    const policy = { signal: opts.signal, ...(mode === 'owner' ? { sameOrigin: url.origin } : {}) };
+    const robots = await robotsIntel(url.origin, policy);
     if (!robotsAllows(robots, url.pathname)) {
         notes.push(`robots.txt disallows ${url.pathname} for generic crawlers — fetched once for passive analysis only; deep crawl will skip it.`);
     }
 
-    const page = await safeFetch(url, { timeoutMs: 20000 });
+    const page = await safeFetch(url, { timeoutMs: 20000, signal: opts.signal, ...(mode === 'owner' ? { sameOrigin: url.origin } : {}) });
     const final = new URL(page.url);
     const apex = registrableDomain(final.hostname);
     const contentType = page.headers.get('content-type') || '';
     const html = /html|xml|text/i.test(contentType) || !contentType ? page.text : '';
     if (!html) notes.push(`Target returned non-HTML content (${contentType}); HTML modules skipped.`);
     if (page.status >= 400) notes.push(`Target responded with HTTP ${page.status}; results may reflect an error page or bot challenge.`);
+    if (page.truncated) notes.push('Primary response exceeded the size cap; content assessment is partial.');
 
     const parsed = parseHtml(html || '<html></html>', final.href);
 
     const [dns, tls, sitemap, securityTxt, ct, wayback] = await Promise.all([
         dnsIntel(final.hostname, apex),
         final.protocol === 'https:' ? tlsIntel(final.hostname, page.resolvedIPs[0], Number(final.port) || 443) : Promise.resolve({ available: false, sans: [], error: 'Target is plain HTTP' }),
-        sitemapIntel(final.origin, robots),
-        securityTxtIntel(final.origin),
+        sitemapIntel(final.origin, robots, policy),
+        securityTxtIntel(final.origin, policy),
         ctIntel(apex, opts.ct !== false),
         waybackIntel(final.hostname, opts.wayback !== false),
     ]);
 
-    return {
+    const tech = fingerprint(html, page.headers, page.setCookies, parsed.scripts, parsed.meta.generator);
+    const assessment = await assessSurface(page, tech, mode, robots, inventory, opts.signal);
+    return redactReport({
         engine: `${ENGINE} v${VERSION}`,
         generatedAt: new Date().toISOString(),
         durationMs: Date.now() - started,
@@ -54,7 +67,7 @@ export async function runRecon(input: string, opts: ReconOptions = {}): Promise<
         },
         dns, tls,
         headers: auditHeaders(page.headers, page.setCookies, final.protocol === 'https:'),
-        tech: fingerprint(html, page.headers, page.setCookies, parsed.scripts, parsed.meta.generator),
+        tech,
         contacts: parsed.contacts,
         meta: parsed.meta,
         links: parsed.links,
@@ -62,8 +75,8 @@ export async function runRecon(input: string, opts: ReconOptions = {}): Promise<
         subfolders: parsed.subfolders,
         forms: parsed.forms,
         accessibility: parsed.accessibility,
-        robots, sitemap, securityTxt, ct, wayback, notes,
-    };
+        robots, sitemap, securityTxt, ct, wayback, notes, assessment,
+    });
 }
 
 /** Polite breadth-first crawl of same-host pages. Honours robots.txt + crawl-delay. */

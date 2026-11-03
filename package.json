@@ -1,13 +1,17 @@
 {
   "name": "ghostwires-mk4",
   "private": true,
-  "version": "4.0.0",
+  "version": "4.2.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist-server/server.cjs",
+    "build": "vite build && esbuild server.ts scripts/workspace-account.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outdir=dist-server --out-extension:.js=.cjs",
     "start": "node dist-server/server.cjs",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:smoke": "node tests/production-smoke.mjs",
+    "test:browser": "node --import tsx tests/browser-smoke.mjs",
+    "workspace:account": "node dist-server/scripts/workspace-account.cjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -34,6 +38,6 @@
   "description": "GhostWires Mk.IV — passive OSINT reconnaissance (DNS, TLS, headers, tech fingerprint, contacts, CT logs, Wayback) with AI-grounded analysis via NVIDIA NIM, Gemini, OpenRouter or Groq.",
   "author": "Yasin Mohammed Miah, Student of BCU, BSc Computing Top-Up (Hons)",
   "engines": {
-    "node": ">=20.12"
+    "node": ">=22.16"
   }
 }
